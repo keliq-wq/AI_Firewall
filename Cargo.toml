@@ -1,0 +1,7 @@
+[workspace]
+members = ["programs/firewall"]
+resolver = "2"
+
+# 链上程序安全要求（anchor build lint 强制）
+[profile.release]
+overflow-checks = true

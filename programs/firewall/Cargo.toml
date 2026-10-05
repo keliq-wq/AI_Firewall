@@ -1,0 +1,19 @@
+[package]
+name = "firewall"
+version = "0.1.0"
+description = "On-chain policy enforcement vault for AI agents (Layer 3 of the AI Agent transaction firewall)"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "firewall"
+
+[features]
+no-entrypoint = []
+no-idl = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build"]
+
+[dependencies]
+anchor-lang = "1.0.0"

@@ -1,0 +1,51 @@
+{
+  "name": "solana-agent-firewall",
+  "version": "0.1.0",
+  "description": "Layer-1 client-side transaction firewall for Solana AI Agents — intercepts and validates transaction intent before signing: owner-change detection, program allow/deny lists, amount & frequency limits, purpose requirements (CLAW four-gate protocol).",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "demo": "tsx demo/demo.ts",
+    "pitch": "tsx demo/pitch.ts",
+    "mcp": "tsx src/mcp/server.ts",
+    "mcp:prod": "node dist/mcp/server.js"
+  },
+  "bin": {
+    "firewall-mcp": "./dist/mcp/server.js"
+  },
+  "keywords": [
+    "solana",
+    "firewall",
+    "ai-agent",
+    "security",
+    "transaction-guard",
+    "solana-agent-kit"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "solana-agent-kit": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "solana-agent-kit": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "zod": "^4.6.5"
+  }
+}

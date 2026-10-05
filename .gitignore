@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.npmrc
+
+# Rust / Anchor 构建产物（含程序部署 keypair，绝不能进 git）
+target/
+programs/*/target/
+.anchor/

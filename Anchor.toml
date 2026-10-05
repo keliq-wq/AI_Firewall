@@ -1,0 +1,17 @@
+[toolchain]
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+firewall = "6RhFJZu9qhTwfADqgdAGo1yiktRd77mQjaSUR62KQDYW"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "yarn run ts-mocha -t 1000000 programs/firewall/tests/**/*.ts"
+
+[hooks]
