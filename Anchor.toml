@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-firewall = "6RhFJZu9qhTwfADqgdAGo1yiktRd77mQjaSUR62KQDYW"
+firewall = "5ZtXDT2Qs1esK3UR61une1fqRkV8KQ7tssMqWXNUFXX"
 
 [provider]
 cluster = "localnet"

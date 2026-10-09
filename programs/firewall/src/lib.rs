@@ -7,8 +7,8 @@ pub mod state;
 
 use instructions::*;
 
-// 程序 ID（部署前请用 `anchor keys sync` 替换为本机生成的 keypair）
-declare_id!("6RhFJZu9qhTwfADqgdAGo1yiktRd77mQjaSUR62KQDYW");
+// 程序 ID（2026-10-09 因旧私钥随公开仓库泄露而轮换；部署与升级权限属于 target/deploy/firewall-keypair.json）
+declare_id!("5ZtXDT2Qs1esK3UR61une1fqRkV8KQ7tssMqWXNUFXX");
 
 /// AI Agent 交易防火墙 — 第 3 层：链上策略强制执行金库
 ///

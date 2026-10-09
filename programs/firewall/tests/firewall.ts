@@ -9,12 +9,14 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { expect } from "chai";
 import { Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
-import { Firewall } from "../target/types/firewall";
+import idl from "../target/idl/firewall.json";
 
 describe("firewall（第 3 层：链上策略强制金库）", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
-  const program = anchor.workspace.Firewall as Program<Firewall>;
+  // 程序 ID 取自 IDL 的 address 字段（单一事实来源）：
+  // Windows 下 anchor build 无法生成 target/types，且 ID 会在 keypair 轮换后变化，避免硬编码
+  const program = new Program(idl as any, provider);
 
   const authority = Keypair.generate();
   const agent = Keypair.generate();
@@ -67,7 +69,7 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
         .rpc();
       expect.fail("should have thrown");
     } catch (err) {
-      expect(err.toString()).to.contain("AmountExceeded");
+      expect(String(err)).to.contain("AmountExceeded");
     }
   });
 
@@ -83,7 +85,7 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
         .rpc();
       expect.fail("should have thrown");
     } catch (err) {
-      expect(err.toString()).to.contain("UnauthorizedAgent");
+      expect(String(err)).to.contain("UnauthorizedAgent");
     }
   });
 
@@ -93,7 +95,7 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
       .accounts({ agent: agent.publicKey, destination: destination.publicKey })
       .signers([agent])
       .rpc();
-    const vs = await program.account.vaultState.fetch(vaultStatePda);
+    const vs = await (program.account as any).vaultState.fetch(vaultStatePda);
     expect(vs.spentInWindow.toNumber()).to.eq(LAMPORTS_PER_SOL);
   });
 
@@ -107,7 +109,7 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
         .rpc();
       expect.fail("should have thrown");
     } catch (err) {
-      expect(err.toString()).to.contain("DailyLimitExceeded");
+      expect(String(err)).to.contain("DailyLimitExceeded");
     }
   });
 
@@ -125,7 +127,7 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
         .rpc();
       expect.fail("should have thrown");
     } catch (err) {
-      expect(err.toString()).to.contain("ProgramNotAllowed");
+      expect(String(err)).to.contain("ProgramNotAllowed");
     }
   });
 });
