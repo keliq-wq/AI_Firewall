@@ -67,9 +67,9 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
   const DAILY_LIMIT = 10 * LAMPORTS_PER_SOL;
 
   before(async () => {
-    for (const kp of [authority, agent]) {
-      await fund(kp.publicKey, 10 * LAMPORTS_PER_SOL);
-    }
+    // 注资按需精简(devnet 水龙头限流):authority 覆盖初始化租金+费用,agent 覆盖 deposit 1 SOL+费用
+    await fund(authority.publicKey, 2 * LAMPORTS_PER_SOL);
+    await fund(agent.publicKey, 2 * LAMPORTS_PER_SOL);
     await program.methods
       .initialize(agent.publicKey, new anchor.BN(MAX_PER_TX), new anchor.BN(DAILY_LIMIT), [])
       .accounts({ authority: authority.publicKey })
@@ -102,7 +102,7 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
 
   it("withdraw：非登记 Agent 被拒绝（密钥对金库零权限）", async () => {
     const attacker = Keypair.generate();
-    await fund(attacker.publicKey, LAMPORTS_PER_SOL);
+    await fund(attacker.publicKey, 0.5 * LAMPORTS_PER_SOL);
     try {
       await program.methods
         .withdraw(new anchor.BN(1000))
