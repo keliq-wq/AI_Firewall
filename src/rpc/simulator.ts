@@ -47,12 +47,17 @@ export class TransactionSimulator {
       }
     }
 
-    // v1.99 类型要求 accounts.addresses 字段，但 RPC 在省略 addresses 时返回全部被触及账户
-    // （含 CPI 内部账户）——这正是第 2 层需要的完整可见性。运行时刻意省略。
+    // 真实 RPC 强制要求 accounts.addresses 字段（1.18+ 省略会报 "missing field addresses"）。
+    // 传入交易账户键：响应按此顺序返回对应账户状态。
+    // 注：CPI 内部账户不会出现在 addresses 列表中，深度 CPI 可见性留待后续 RPC 版本/代理方案。
+    const keys = accountKeysOf(tx);
     const config = {
       sigVerify: false,
       replaceRecentBlockhash: true,
-      accounts: { encoding: "base64" } as { encoding: "base64"; addresses: string[] },
+      accounts: {
+        encoding: "base64",
+        addresses: keys.map((k) => k.toBase58()),
+      } as { encoding: "base64"; addresses: string[] },
     };
     // 联合类型在两个重载上分别匹配；
     // legacy 路径（旧签名）用 includeAccounts: true → 返回 nonProgramIds 顺序的账户状态，
@@ -69,7 +74,6 @@ export class TransactionSimulator {
       : null;
 
     // 模拟响应中的账户状态与交易账户键顺序对齐（RPC 约定）；未覆盖的键截断处理
-    const keys = accountKeysOf(tx);
     const postStates = value.accounts ?? [];
     const count = Math.min(keys.length, postStates.length);
     const pubkeys = keys.slice(0, count);

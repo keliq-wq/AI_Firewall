@@ -17,12 +17,13 @@ import {
   LAMPORTS_PER_SOL,
   PublicKey,
   SystemProgram,
+  Transaction,
   TransactionInstruction,
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
 import { Firewall, TransactionIntent } from "../src";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
@@ -49,9 +50,31 @@ async function main(): Promise<void> {
   const wallet = loadWallet();
 
   if (!process.env.WALLET_KEYPAIR) {
-    const sig = await connection.requestAirdrop(wallet.publicKey, 10 * LAMPORTS_PER_SOL);
-    await connection.confirmTransaction(sig, "confirmed");
-    console.log(`  新钱包 ${wallet.publicKey.toBase58()} 已 airdrop 10 SOL`);
+    // Windows 上 test-validator 的 requestAirdrop 有已知 bug(见 docs/ONLINE-TESTING.md),
+    // 优先用 FAUCET_KEYPAIR 直接转账注资
+    const faucetPath = process.env.FAUCET_KEYPAIR;
+    if (faucetPath && existsSync(faucetPath)) {
+      const faucet = Keypair.fromSecretKey(
+        Uint8Array.from(JSON.parse(readFileSync(faucetPath, "utf-8")) as number[]),
+      );
+      const tx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: faucet.publicKey,
+          toPubkey: wallet.publicKey,
+          lamports: 10 * LAMPORTS_PER_SOL,
+        }),
+      );
+      tx.feePayer = faucet.publicKey;
+      tx.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash;
+      tx.sign(faucet);
+      const sig = await connection.sendRawTransaction(tx.serialize());
+      await connection.confirmTransaction(sig, "confirmed");
+      console.log(`  新钱包 ${wallet.publicKey.toBase58()} 已注资 10 SOL（faucet keypair 转账）`);
+    } else {
+      const sig = await connection.requestAirdrop(wallet.publicKey, 10 * LAMPORTS_PER_SOL);
+      await connection.confirmTransaction(sig, "confirmed");
+      console.log(`  新钱包 ${wallet.publicKey.toBase58()} 已 airdrop 10 SOL`);
+    }
   } else {
     console.log(`  使用已注资钱包 ${wallet.publicKey.toBase58()}`);
   }

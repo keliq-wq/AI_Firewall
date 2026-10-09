@@ -8,7 +8,8 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { expect } from "chai";
-import { Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
+import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import { readFileSync, existsSync } from "fs";
 import idl from "../target/idl/firewall.json";
 
 describe("firewall（第 3 层：链上策略强制金库）", () => {
@@ -17,6 +18,33 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
   // 程序 ID 取自 IDL 的 address 字段（单一事实来源）：
   // Windows 下 anchor build 无法生成 target/types，且 ID 会在 keypair 轮换后变化，避免硬编码
   const program = new Program(idl as any, provider);
+
+  /**
+   * 注资：优先用 FAUCET_KEYPAIR（本地验证器的 faucet 密钥，创世即有巨额余额）直接转账——
+   * Windows 上 test-validator 的 requestAirdrop 有已知 bug（RPC 拨 0.0.0.0:9900 → WSAEADDRNOTAVAIL），
+   * 一律返回 Internal error。未配置时回退到 requestAirdrop（devnet 场景）。
+   */
+  let faucet: Keypair | null = null;
+  if (process.env.FAUCET_KEYPAIR && existsSync(process.env.FAUCET_KEYPAIR)) {
+    faucet = Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(readFileSync(process.env.FAUCET_KEYPAIR, "utf-8")) as number[]),
+    );
+  }
+  async function fund(pubkey: PublicKey, lamports: number): Promise<void> {
+    if (faucet) {
+      const tx = new Transaction().add(
+        SystemProgram.transfer({ fromPubkey: faucet.publicKey, toPubkey: pubkey, lamports }),
+      );
+      tx.feePayer = faucet.publicKey;
+      tx.recentBlockhash = (await provider.connection.getLatestBlockhash("confirmed")).blockhash;
+      tx.sign(faucet);
+      const sig = await provider.connection.sendRawTransaction(tx.serialize());
+      await provider.connection.confirmTransaction(sig, "confirmed");
+    } else {
+      const sig = await provider.connection.requestAirdrop(pubkey, lamports);
+      await provider.connection.confirmTransaction(sig);
+    }
+  }
 
   const authority = Keypair.generate();
   const agent = Keypair.generate();
@@ -40,8 +68,7 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
 
   before(async () => {
     for (const kp of [authority, agent]) {
-      const sig = await provider.connection.requestAirdrop(kp.publicKey, 10 * LAMPORTS_PER_SOL);
-      await provider.connection.confirmTransaction(sig);
+      await fund(kp.publicKey, 10 * LAMPORTS_PER_SOL);
     }
     await program.methods
       .initialize(agent.publicKey, new anchor.BN(MAX_PER_TX), new anchor.BN(DAILY_LIMIT), [])
@@ -75,8 +102,7 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
 
   it("withdraw：非登记 Agent 被拒绝（密钥对金库零权限）", async () => {
     const attacker = Keypair.generate();
-    const sig = await provider.connection.requestAirdrop(attacker.publicKey, LAMPORTS_PER_SOL);
-    await provider.connection.confirmTransaction(sig);
+    await fund(attacker.publicKey, LAMPORTS_PER_SOL);
     try {
       await program.methods
         .withdraw(new anchor.BN(1000))
