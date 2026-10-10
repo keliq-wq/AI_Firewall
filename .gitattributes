@@ -1,0 +1,2 @@
+# 批处理必须 CRLF:cmd.exe 解析 LF-only 的 .bat 会报「此时不应有 ...」
+*.bat text eol=crlf

@@ -134,6 +134,8 @@ npm run dashboard
 的模拟会显示余额不足,属预期)。自定义:`RPC_URL=<rpc> WALLET_KEYPAIR=<已注资钱包> npm run dashboard`;
 无头环境/CI 不想弹浏览器加 `NO_OPEN=1`。
 
+Windows 一键:双击仓库根目录的 `start-dashboard.bat`(首次自动 `npm install`,然后自动弹出面板,无需输入任何命令)。
+
 ## 常见问题
 
 - **pitch 报错**:确认 `npm install` 完成,Node ≥ 20。

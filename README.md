@@ -29,6 +29,9 @@ npm test          # 80 tests(20 文件)
 npm run dashboard # 零构建,启动后自动打开浏览器(面板 http://127.0.0.1:3000)
 ```
 
+> Windows 一键体验:装好 Node.js 后直接**双击仓库根目录的 `start-dashboard.bat`**
+> ——首次自动安装依赖,然后自动弹出面板,全程不用输任何命令。
+
 Or install directly from GitHub (works before the npm release):
 
 ```bash
