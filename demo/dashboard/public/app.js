@@ -44,6 +44,16 @@
       timeline: "事件时间线",
       foot: "Layer 1 客户端快速拒绝 · Layer 2 模拟执行验证 · Layer 3 链上强制金库",
       sol: "SOL",
+      tabScenarios: "🎯 攻击剧本",
+      tabLive: "📡 实时拦截日志",
+      liveConnecting: "连接中…",
+      liveConnected: "实时流已连接",
+      liveDisconnected: "实时流断开，自动重连中…",
+      liveEmpty: "暂无判定记录。点击左侧剧本，或让 Agent 把交易 POST 到 /api/validate，判定会在这里实时滚动。",
+      liveHint: "每一条防火墙判定实时上屏：剧本点击、以及任意 Agent 通过 POST /api/validate 提交的真实交易。历史最近 300 条持久化，重启不丢。",
+      liveCountDeny: "拦截",
+      liveCountEscalate: "确认",
+      liveCountAllow: "放行",
     },
     en: {
       brand: "AI Agent Transaction Firewall",
@@ -84,6 +94,16 @@
       timeline: "Event Timeline",
       foot: "Layer 1 client-side rejection · Layer 2 simulation · Layer 3 on-chain vault",
       sol: "SOL",
+      tabScenarios: "🎯 Attack Scenarios",
+      tabLive: "📡 Live Interception Log",
+      liveConnecting: "Connecting…",
+      liveConnected: "Live stream connected",
+      liveDisconnected: "Stream lost, reconnecting…",
+      liveEmpty: "No verdicts yet. Click a scenario, or have an agent POST to /api/validate — verdicts stream here live.",
+      liveHint: "Every firewall verdict streams here live: scenario clicks, and real transactions any agent submits via POST /api/validate. Last 300 entries persist across restarts.",
+      liveCountDeny: "blocked",
+      liveCountEscalate: "confirm",
+      liveCountAllow: "allowed",
     },
   };
 
@@ -236,6 +256,86 @@
     }
   }
 
+  /* ── 页签切换 ── */
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  function switchTab(name) {
+    tabBtns.forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+    $("pane-scenarios").hidden = name !== "scenarios";
+    $("pane-live").hidden = name !== "live";
+    if (name === "live") renderLog();
+  }
+  tabBtns.forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+
+  /* ── 实时拦截日志(SSE) ── */
+  const logEntries = [];
+
+  function liveCountsText() {
+    const d = logEntries.filter((e) => e.verdict === "deny").length;
+    const c = logEntries.filter((e) => e.verdict === "escalate").length;
+    const a = logEntries.filter((e) => e.verdict === "allow").length;
+    return `${t("liveCountDeny")} ${d} · ${t("liveCountEscalate")} ${c} · ${t("liveCountAllow")} ${a}`;
+  }
+
+  function renderLogEntry(ev) {
+    const li = document.createElement("li");
+    li.className = "log-entry";
+    const sevs = (ev.concerns || [])
+      .slice(0, 3)
+      .map((c) => `<span class="sev ${c.severity}">${t(SEV_KEYS[c.severity] || c.severity)}</span>`)
+      .join("");
+    li.innerHTML = `
+      <span class="l-time">${timeStr(ev.time)}</span>
+      <span class="l-verdict ${VERDICT_CLS[ev.verdict] || ""}">${t(VERDICT_KEYS[ev.verdict] || ev.verdict)}</span>
+      <span class="l-summary">${ev.summary}</span>
+      ${ev.action ? `<span class="l-action">${ev.action}${ev.amount != null ? " · " + ev.amount : ""}${ev.recipient ? " → " + short(ev.recipient, 10) : ""}</span>` : ""}
+      <span class="l-concerns">${sevs}</span>
+      ${ev.fingerprint ? `<span class="l-fp" title="${ev.fingerprint}">#${short(ev.fingerprint, 10)}</span>` : ""}`;
+    return li;
+  }
+
+  function renderLog() {
+    const feed = $("log-feed");
+    feed.innerHTML = "";
+    if (logEntries.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "log-empty";
+      empty.textContent = t("liveEmpty");
+      feed.appendChild(empty);
+    } else {
+      for (const ev of logEntries.slice(0, 200)) feed.appendChild(renderLogEntry(ev));
+    }
+    $("live-counts").textContent = liveCountsText();
+  }
+
+  function setLiveStatus(ok) {
+    $("live-dot").className = "dot " + (ok ? "dot-ok" : "dot-fail");
+    $("live-label").textContent = t(ok ? "liveConnected" : "liveDisconnected");
+  }
+
+  function addLogEvent(ev) {
+    logEntries.unshift(ev);
+    if (logEntries.length > 300) logEntries.pop();
+    if (!$("pane-live").hidden) renderLog();
+  }
+
+  const es = new EventSource("/api/events");
+  es.onopen = () => setLiveStatus(true);
+  es.onmessage = (msg) => {
+    try {
+      const data = JSON.parse(msg.data);
+      if (data.init) {
+        logEntries.length = 0;
+        for (const ev of data.events) logEntries.push(ev);
+        renderLog();
+      } else {
+        addLogEvent(data);
+      }
+    } catch {
+      // 忽略坏消息
+    }
+  };
+  es.onerror = () => setLiveStatus(false);
+
   /* ── 语言切换 ── */
   $("lang-btn").addEventListener("click", () => {
     lang = lang === "zh" ? "en" : "zh";
@@ -244,6 +344,7 @@
     applyStatic();
     renderScenarios();
     renderResult();
+    renderLog();
     refreshState();
   });
 

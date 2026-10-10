@@ -18,6 +18,9 @@ tmp_*/
 # 持久化测试密钥（testnet 测试钱包，不入库）
 scripts/keys/
 
+# 面板实时拦截日志（运行时 JSONL，不入库）
+demo/dashboard/logs/
+
 # 本地工具状态
 .claude/
 

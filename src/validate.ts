@@ -13,13 +13,15 @@ import { Narrator, TemplateNarrator } from "./narrator";
 import { ParsedTransaction, parseTransaction } from "./parser";
 import { ResolvedPolicy, resolvePolicy } from "./policy";
 import { TransactionSimulator } from "./rpc/simulator";
-import { Concern, EscalationTier, FirewallPolicy, GateDecision, TransactionIntent, ValidationResult, Verdict } from "./types";
+import { Concern, DecisionEvent, EscalationTier, FirewallPolicy, GateDecision, TransactionIntent, ValidationResult, Verdict } from "./types";
 
 export interface FirewallOptions {
   /** RPC 连接：配置后启用第 2 层（simulation 门），对原始交易执行模拟验证 */
   connection?: Connection;
   /** 风险叙述器：默认 TemplateNarrator（离线模板），可替换为 LLM 实现 */
   narrator?: Narrator;
+  /** 判定事件回调（实时拦截日志/审计流水）：每次校验结束时同步触发；回调抛错不影响判定 */
+  onDecision?: (event: DecisionEvent) => void;
 }
 
 /**
@@ -38,6 +40,7 @@ export class Firewall {
   private readonly simulator?: TransactionSimulator;
   private readonly connection?: Connection;
   private readonly narrator: Narrator;
+  private readonly onDecision?: (event: DecisionEvent) => void;
   /** 升级占比统计(验收指标:escalate 占比过高 = 告警疲劳) */
   private validateCount = 0;
   private escalateCount = 0;
@@ -48,6 +51,7 @@ export class Firewall {
     this.simulator = options.connection ? new TransactionSimulator(options.connection) : undefined;
     this.connection = options.connection;
     this.narrator = options.narrator ?? new TemplateNarrator();
+    this.onDecision = options.onDecision;
   }
 
   /** 验证一笔交易意图。放行时（且声明了金额）将金额计入 24h 滚动支出。 */
@@ -93,7 +97,7 @@ export class Firewall {
     this.tierCounts[tier] = (this.tierCounts[tier] ?? 0) + 1;
     if (overall === "escalate") this.escalateCount++;
 
-    return {
+    const result: ValidationResult = {
       shouldProceed: overall === "allow",
       requiresConfirmation: overall === "escalate",
       tier,
@@ -102,6 +106,27 @@ export class Firewall {
       concerns,
       summary: buildSummary(decisions, overall),
     };
+
+    // 判定事件(实时拦截日志):监听方抛错不得影响判定结果
+    if (this.onDecision) {
+      try {
+        this.onDecision({
+          time: Date.now(),
+          fingerprint: result.fingerprint,
+          verdict: overall,
+          tier,
+          action: intent.action,
+          amount: intent.amount,
+          recipient: intent.recipient,
+          summary: result.summary,
+          concerns: result.concerns.slice(0, 5).map((c) => ({ id: c.id, severity: c.severity, message: c.message })),
+        });
+      } catch {
+        // 忽略监听方异常
+      }
+    }
+
+    return result;
   }
 
   /** 升级占比统计(验收指标):escalate 占比 = 需人工确认次数 / 校验总次数 */

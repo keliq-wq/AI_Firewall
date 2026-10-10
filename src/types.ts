@@ -104,6 +104,26 @@ export interface ValidationResult {
   summary: string;
 }
 
+/** 单次校验的判定事件（实时拦截日志用）：每次 validateTransaction 结束时通过 FirewallOptions.onDecision 发出 */
+export interface DecisionEvent {
+  /** 判定时间戳（ms） */
+  time: number;
+  /** 交易指纹（有交易或幂等键时非空） */
+  fingerprint: string | null;
+  /** 总判定 */
+  verdict: Verdict;
+  /** 升级分级 */
+  tier: EscalationTier;
+  /** 意图高层描述（供日志展示，可为空） */
+  action?: string;
+  amount?: number | string;
+  recipient?: string;
+  /** 自然语言风险摘要 */
+  summary: string;
+  /** 主要风险发现（最多 5 条，按严重度降序） */
+  concerns: { id: string; severity: Severity; message: string }[];
+}
+
 /** 滚动支出存储抽象 */
 export interface SpendStore {
   /** 记录一笔支出；同一 (scope, key) 重复记录视为幂等更新 */

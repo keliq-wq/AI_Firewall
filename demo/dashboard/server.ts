@@ -11,10 +11,18 @@
  *   FAUCET_KEYPAIR 注资钱包（余额 < 0.06 SOL 时自动转 0.5 补充）
  *   PORT           默认 3000
  *   NO_OPEN=1      启动时不自动打开浏览器（无头环境/CI 用）
+ *
+ * API：
+ *   POST /api/attack     剧本演示（点击剧本按钮）
+ *   POST /api/validate   实时拦截入口：任意 Agent/MCP 客户端把交易 POST 过来，
+ *                        判定实时写入日志并 SSE 推给面板（MCP 同款 base64 语义）
+ *   GET  /api/events     SSE 实时拦截日志流（连接时先推历史 200 条，之后逐条推送）
+ *   GET  /api/state      面板状态
+ * 日志持久化：每条判定追加到 logs/events.jsonl（重启加载最近 300 条，目录已 gitignore）
  */
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import { exec } from "child_process";
-import { existsSync, readFileSync, statSync, readdirSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, readdirSync } from "fs";
 import { join, extname } from "path";
 import {
   Connection,
@@ -23,8 +31,9 @@ import {
   PublicKey,
   SystemProgram,
   Transaction,
+  VersionedTransaction,
 } from "@solana/web3.js";
-import { Firewall, TransactionIntent, TemplateNarrator } from "../../src";
+import { DecisionEvent, Firewall, TransactionIntent, TemplateNarrator } from "../../src";
 import { DASHBOARD_POLICY, SCAM_PROGRAM, scenarioDefinitions } from "../../scripts/attack-scenarios";
 import { confirmHttp, getLatestBlockhashRetry, sendRawTransactionRetry } from "../../scripts/tx-confirm";
 import idl from "../../programs/firewall/idl/firewall.json";
@@ -33,6 +42,18 @@ const PORT = Number(process.env.PORT || 3000);
 const RPC_URL = process.env.RPC_URL || "https://api.devnet.solana.com";
 const PUBLIC_DIR = join(__dirname, "public");
 const PROGRAM_ID = new PublicKey((idl as any).address);
+const LOG_DIR = join(__dirname, "logs");
+const LOG_FILE = join(LOG_DIR, "events.jsonl");
+const LOG_MAX = 500;
+
+/** base64 序列化交易 → Transaction / VersionedTransaction（按首字节高位区分，与 MCP 同语义） */
+function decodeTransaction(encoded: string): Transaction | VersionedTransaction {
+  const buffer = Buffer.from(encoded, "base64");
+  const first = buffer[0];
+  return first !== undefined && (first & 0x80) !== 0
+    ? VersionedTransaction.deserialize(buffer)
+    : Transaction.from(buffer);
+}
 
 function loadKp(path: string): Keypair {
   return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(path, "utf-8")) as number[]));
@@ -87,7 +108,41 @@ async function main(): Promise<void> {
     }
   }
 
-  const firewall = new Firewall(DASHBOARD_POLICY, { connection });
+  // 实时拦截日志：内存 + JSONL 持久化（重启加载最近 300 条）+ SSE 订阅者
+  const logEvents: DecisionEvent[] = [];
+  mkdirSync(LOG_DIR, { recursive: true });
+  if (existsSync(LOG_FILE)) {
+    for (const line of readFileSync(LOG_FILE, "utf-8").trim().split("\n").slice(-300)) {
+      try {
+        logEvents.push(JSON.parse(line));
+      } catch {
+        // 跳过损坏行
+      }
+    }
+  }
+  logEvents.reverse(); // JSONL 为旧→新追加序，内存保持新在前
+  const sseClients = new Set<ServerResponse>();
+
+  const firewall = new Firewall(DASHBOARD_POLICY, {
+    connection,
+    onDecision: (ev) => {
+      logEvents.unshift(ev);
+      if (logEvents.length > LOG_MAX) logEvents.pop();
+      try {
+        appendFileSync(LOG_FILE, JSON.stringify(ev) + "\n");
+      } catch {
+        // 磁盘写入失败不影响面板
+      }
+      const payload = `data: ${JSON.stringify(ev)}\n\n`;
+      for (const client of sseClients) {
+        try {
+          client.write(payload);
+        } catch {
+          sseClients.delete(client);
+        }
+      }
+    },
+  });
   const scenarios = scenarioDefinitions({ connection, wallet: wallet.publicKey });
   const events: EventRecord[] = [];
   const spent: { time: number; amount: number }[] = [];
@@ -167,6 +222,7 @@ async function main(): Promise<void> {
       },
       scamProgram: SCAM_PROGRAM.toBase58(),
       events: events.slice(0, 50),
+      logCount: logEvents.length,
     };
   }
 
@@ -199,6 +255,70 @@ async function main(): Promise<void> {
         const record = await runScenario(id);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(record));
+        return;
+      }
+      if (url.pathname === "/api/events") {
+        // SSE 实时拦截日志流：连接时先推历史 200 条（init 消息），之后每条判定实时推送
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+        res.write(`data: ${JSON.stringify({ init: true, events: logEvents.slice(0, 200) })}\n\n`);
+        sseClients.add(res);
+        req.on("close", () => sseClients.delete(res));
+        return;
+      }
+      if (url.pathname === "/api/validate" && req.method === "POST") {
+        // 实时拦截入口：任意 Agent/MCP 客户端 POST 原始交易 → 防火墙判定 → 日志实时上屏
+        let body = "";
+        for await (const chunk of req) body += chunk;
+        let args: Record<string, unknown>;
+        try {
+          args = JSON.parse(body || "{}");
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "invalid JSON body" }));
+          return;
+        }
+        const { transactionBase64 } = args;
+        if (typeof transactionBase64 !== "string" || transactionBase64.length === 0) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "transactionBase64 is required (same semantics as the MCP tool)" }));
+          return;
+        }
+        let transaction: Transaction | VersionedTransaction;
+        try {
+          transaction = decodeTransaction(transactionBase64);
+        } catch (e) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: `cannot decode transaction: ${String(e)}` }));
+          return;
+        }
+        const intent: TransactionIntent = {
+          action: typeof args.action === "string" ? args.action : "external",
+          amount:
+            typeof args.amount === "number" || typeof args.amount === "string"
+              ? (args.amount as number | string)
+              : undefined,
+          recipient: typeof args.recipient === "string" ? args.recipient : undefined,
+          purpose: typeof args.purpose === "string" ? args.purpose : undefined,
+          wallet: typeof args.wallet === "string" ? args.wallet : undefined,
+          idempotencyKey: typeof args.idempotencyKey === "string" ? args.idempotencyKey : undefined,
+        };
+        intent.transaction = transaction;
+        const result = await firewall.validateTransaction(intent);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            shouldProceed: result.shouldProceed,
+            requiresConfirmation: result.requiresConfirmation,
+            tier: result.tier,
+            fingerprint: result.fingerprint,
+            summary: result.summary,
+            concerns: result.concerns.slice(0, 5),
+          }),
+        );
         return;
       }
       if (url.pathname === "/api/state") {
@@ -250,6 +370,17 @@ async function main(): Promise<void> {
       console.log(`已在默认浏览器打开面板 ${process.platform}`);
     }
   });
+
+  // SSE 心跳：防止浏览器/中间代理空闲断连（unref 不阻塞进程退出）
+  setInterval(() => {
+    for (const client of sseClients) {
+      try {
+        client.write(": ping\n\n");
+      } catch {
+        sseClients.delete(client);
+      }
+    }
+  }, 15000).unref();
 }
 
 main().catch((e) => {

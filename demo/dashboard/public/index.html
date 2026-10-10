@@ -24,23 +24,38 @@
 
   <main class="layout">
     <section class="panel main-panel">
-      <h2 data-i18n="scenarios">攻击剧本</h2>
-      <p class="hint" data-i18n="scenariosHint">点击发起一笔攻击交易，观察防火墙在签名前的实时拦截。全部走真实 RPC 模拟执行。</p>
-      <div class="scenarios" id="scenarios"><!-- 按钮由 /api/scenarios 生成 --></div>
+      <div class="tabs" id="tabs">
+        <button class="tab-btn active" data-tab="scenarios" data-i18n="tabScenarios">🎯 攻击剧本</button>
+        <button class="tab-btn" data-tab="live" data-i18n="tabLive">📡 实时拦截日志</button>
+      </div>
 
-      <div class="result-card" id="result-card">
-        <div class="result-empty" id="result-empty" data-i18n="resultEmpty">← 点击左侧剧本，查看防火墙判定</div>
-        <div class="result-body" id="result-body" hidden>
-          <div class="result-head">
-            <span class="verdict" id="verdict">—</span>
-            <div>
-              <div class="result-title" id="result-title">—</div>
-              <div class="result-summary" id="result-summary">—</div>
+      <div class="tab-pane" id="pane-scenarios">
+        <p class="hint" data-i18n="scenariosHint">点击发起一笔攻击交易，观察防火墙在签名前的实时拦截。全部走真实 RPC 模拟执行。</p>
+        <div class="scenarios" id="scenarios"><!-- 按钮由 /api/scenarios 生成 --></div>
+
+        <div class="result-card" id="result-card">
+          <div class="result-empty" id="result-empty" data-i18n="resultEmpty">← 点击左侧剧本，查看防火墙判定</div>
+          <div class="result-body" id="result-body" hidden>
+            <div class="result-head">
+              <span class="verdict" id="verdict">—</span>
+              <div>
+                <div class="result-title" id="result-title">—</div>
+                <div class="result-summary" id="result-summary">—</div>
+              </div>
             </div>
+            <ul class="concerns" id="concerns"></ul>
+            <blockquote class="narration" id="narration"></blockquote>
           </div>
-          <ul class="concerns" id="concerns"></ul>
-          <blockquote class="narration" id="narration"></blockquote>
         </div>
+      </div>
+
+      <div class="tab-pane" id="pane-live" hidden>
+        <div class="live-head">
+          <span class="chip" id="live-chip"><span class="dot dot-unknown" id="live-dot"></span><span id="live-label" data-i18n="liveConnecting">连接中…</span></span>
+          <span class="live-counts" id="live-counts"></span>
+        </div>
+        <p class="hint" data-i18n="liveHint">每一条防火墙判定实时上屏：剧本点击、以及任意 Agent 通过 POST /api/validate 提交的真实交易。历史最近 300 条持久化，重启不丢。</p>
+        <ul class="log-feed" id="log-feed"></ul>
       </div>
     </section>
 

@@ -136,6 +136,10 @@ npm run dashboard
 
 Windows 一键:双击仓库根目录的 `start-dashboard.bat`(首次自动 `npm install`,然后自动弹出面板,无需输入任何命令)。
 
+面板含两个页签:**🎯 攻击剧本**(五剧本演示)与 **📡 实时拦截日志**(SSE 实时流 + JSONL 持久化,
+重启保留最近 300 条)。任意 Agent 把原始交易 POST 到 `http://127.0.0.1:3000/api/validate`
+(MCP 同款 base64 语义,见 `src/mcp/server.ts` 的 INTENT_SCHEMA),判定即实时上屏。
+
 ## 常见问题
 
 - **pitch 报错**:确认 `npm install` 完成,Node ≥ 20。

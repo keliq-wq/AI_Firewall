@@ -26,7 +26,7 @@ git clone https://github.com/keliq-wq/AI_Firewall.git
 cd AI_Firewall
 npm install
 npm test          # 80 tests(20 文件)
-npm run dashboard # 零构建,启动后自动打开浏览器(面板 http://127.0.0.1:3000)
+npm run dashboard # 零构建,自动打开浏览器:剧本演示 + 实时拦截日志(SSE 实时流,重启不丢)
 ```
 
 > Windows 一键体验:装好 Node.js 后直接**双击仓库根目录的 `start-dashboard.bat`**

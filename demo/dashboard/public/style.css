@@ -224,6 +224,72 @@ body {
 .t-verdict.escalate { color: var(--warning); }
 .t-verdict.allow { color: var(--good); }
 
+/* ── 页签 ── */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+.tab-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.tab-btn:hover { color: var(--ink); }
+.tab-btn.active {
+  color: var(--ink);
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+.tab-pane[hidden] { display: none; }
+
+/* ── 实时拦截日志 ── */
+.live-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.live-counts { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.log-feed {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 62vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.log-entry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: baseline;
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--hairline);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--page);
+}
+.log-entry:has(.l-verdict.deny) { border-left-color: var(--critical); }
+.log-entry:has(.l-verdict.escalate) { border-left-color: var(--warning); }
+.log-entry:has(.l-verdict.allow) { border-left-color: var(--good); }
+.log-entry .l-time { color: var(--muted); font-size: 10.5px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.log-entry .l-verdict { flex-shrink: 0; font-weight: 700; font-size: 11px; padding: 1px 8px; border-radius: 4px; }
+.l-verdict.deny { color: var(--critical); background: rgba(208, 59, 59, 0.12); }
+.l-verdict.escalate { color: var(--warning); background: rgba(250, 178, 25, 0.10); }
+.l-verdict.allow { color: var(--good); background: rgba(12, 163, 12, 0.12); }
+.log-entry .l-summary { color: var(--ink-2); flex: 1 1 100%; }
+.log-entry .l-action { color: var(--muted); font-size: 11px; }
+.log-entry .l-concerns { display: inline-flex; gap: 4px; margin-left: auto; }
+.log-entry .l-fp { font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; color: var(--muted); }
+.log-empty { color: var(--muted); font-size: 13px; padding: 28px 0; text-align: center; }
+
 .foot {
   border-top: 1px solid var(--border);
   padding: 12px 22px;
