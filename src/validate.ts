@@ -1,4 +1,4 @@
-import { Connection } from "@solana/web3.js";
+import { Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { avoidanceGate } from "./gates/avoidance";
 import { credibilityGate } from "./gates/credibility";
 import { envelopeGate } from "./gates/envelope";
@@ -83,8 +83,15 @@ export class Firewall {
   }
 
   private async recordSpend(intent: TransactionIntent, parsed: ParsedTransaction): Promise<void> {
-    const amount = parseAmount(intent.amount);
-    if (amount == null) return; // 未声明金额不记账（代币部分由 Layer 2 处理）
+    // 修复「不声明金额永不记账」:声明缺失时用解析出的真实转出额兜底
+    let amount = parseAmount(intent.amount);
+    if (amount == null) {
+      const lamports = parsed.nativeTransfers.reduce((sum, t) => sum + t.lamports, 0);
+      if (lamports > 0) {
+        amount = lamports / (this.policy.amountUnit === "sol" ? LAMPORTS_PER_SOL : 1);
+      }
+    }
+    if (amount == null) return; // 确实无资金移动(代币部分由 Layer 2 处理)
     await this.policy.store.record(
       this.policy.scope,
       deriveSpendKey(intent, parsed),

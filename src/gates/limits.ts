@@ -1,4 +1,5 @@
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { transactionFingerprint } from "../accounting";
 import { ParsedTransaction } from "../parser";
 import { ResolvedPolicy } from "../policy";
 import { Concern, GateDecision, TransactionIntent, Verdict } from "../types";
@@ -14,14 +15,12 @@ export function parseAmount(raw: number | string | undefined): number | null {
 }
 
 /**
- * 滚动支出记账键：优先幂等键；缺省按 action + 收款方推导，
- * 使同一意图重复校验时幂等（不重复计入 24h 滚动支出）。
+ * 滚动支出记账键 = 交易内容指纹(见 src/accounting.ts)。
+ * 同笔交易重试 → 同指纹 → 幂等替换;不同交易(即使同收款方)→ 不同指纹 → 累积。
+ * 修复审计发现的「同收款方 key 覆盖不累积」与「缺 recipient 塌缩」两路绕过。
  */
 export function deriveSpendKey(intent: TransactionIntent, parsed: ParsedTransaction): string {
-  return (
-    intent.idempotencyKey ??
-    `${intent.action}:${parsed.nativeTransfers.map((t) => t.to).join(",") || intent.recipient || "?"}`
-  );
+  return transactionFingerprint(intent, parsed);
 }
 
 /**
@@ -78,7 +77,8 @@ export async function limitsGate(
       });
     }
 
-    // 排除自身幂等键的既有记录：重复校验同一意图时按"替换"而非"累加"计算
+    // 24h 支出 = 窗口内全部条目之和(指纹键保证同笔替换、异笔累积);
+    // 排除自身指纹:已记录的同一意图重新校验时按"替换"而非"累加"判定
     const spent = await policy.store.sumSince(
       policy.scope,
       policy.timeProvider() - DAY_MS,

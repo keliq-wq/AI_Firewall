@@ -1,6 +1,7 @@
 export * from "./types";
 export { resolvePolicy, ResolvedPolicy } from "./policy";
 export { InMemorySpendStore } from "./store";
+export { AppendOnlySpendStore, transactionFingerprint } from "./accounting";
 export {
   parseTransaction,
   classifyActions,
