@@ -105,18 +105,20 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
     program.programId,
   );
 
-  const MAX_PER_TX = 5 * LAMPORTS_PER_SOL;
-  const DAILY_LIMIT = 10 * LAMPORTS_PER_SOL;
-  const DEPOSIT = 0.5 * LAMPORTS_PER_SOL;
+  // 微型预算(水龙头 8 小时限流):单笔上限 0.1 / 24h 上限 0.08 / 入金 0.04,单轮注资 ≈0.061 SOL;
+  // 窗口余量设计:重跑时已累计的支出不误伤「限额内成功」用例(0.02×2 + 0.07 = 0.11 > 0.08 仍能触发日限)
+  const MAX_PER_TX = 0.1 * LAMPORTS_PER_SOL;
+  const DAILY_LIMIT = 0.08 * LAMPORTS_PER_SOL;
+  const DEPOSIT = 0.04 * LAMPORTS_PER_SOL;
 
   before(async () => {
-    // 注资最小化(水龙头限流严重):authority 只覆盖 PDA 租金+费用,agent 覆盖 deposit 0.5+费用
+    // 注资最小化:authority 只覆盖 PDA 租金+费用,agent 覆盖 deposit 0.04+费用
     const [authBal, agentBal] = await Promise.all([
       provider.connection.getBalance(authority.publicKey),
       provider.connection.getBalance(agent.publicKey),
     ]);
-    if (authBal < 0.1 * LAMPORTS_PER_SOL) await fund(authority.publicKey, 0.1 * LAMPORTS_PER_SOL);
-    if (agentBal < 0.55 * LAMPORTS_PER_SOL) await fund(agent.publicKey, 0.55 * LAMPORTS_PER_SOL);
+    if (authBal < 0.01 * LAMPORTS_PER_SOL) await fund(authority.publicKey, 0.01 * LAMPORTS_PER_SOL);
+    if (agentBal < 0.05 * LAMPORTS_PER_SOL) await fund(agent.publicKey, 0.05 * LAMPORTS_PER_SOL);
     // 幂等：policy 已存在则跳过初始化（持久化密钥重跑场景）
     const policyExists = await provider.connection.getAccountInfo(policyPda);
     if (!policyExists) {
@@ -156,7 +158,7 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
   it("withdraw：超单笔限额被链上拒绝（AmountExceeded）", async () => {
     const r = await sendProgramTx(
       program.methods
-        .withdraw(new anchor.BN(MAX_PER_TX + 1))
+        .withdraw(new anchor.BN(0.11 * LAMPORTS_PER_SOL))
         .accounts({
           agent: agent.publicKey,
           destination: destination.publicKey,
@@ -172,7 +174,7 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
 
   it("withdraw：非登记 Agent 被拒绝（密钥对金库零权限）", async () => {
     const attacker = Keypair.generate();
-    await fund(attacker.publicKey, 0.02 * LAMPORTS_PER_SOL);
+    await fund(attacker.publicKey, 0.001 * LAMPORTS_PER_SOL);
     const r = await sendProgramTx(
       program.methods
         .withdraw(new anchor.BN(1000))
@@ -192,7 +194,7 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
   it("withdraw：限额内成功，滚动窗口记账更新", async () => {
     const r = await sendProgramTx(
       program.methods
-        .withdraw(new anchor.BN(0.25 * LAMPORTS_PER_SOL))
+        .withdraw(new anchor.BN(0.02 * LAMPORTS_PER_SOL))
         .accounts({
           agent: agent.publicKey,
           destination: destination.publicKey,
@@ -205,14 +207,14 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
     );
     expect(r.err).to.eq(null);
     const vs = await (program.account as any).vaultState.fetch(vaultStatePda);
-    expect(vs.spentInWindow.toNumber()).to.be.gte(0.25 * LAMPORTS_PER_SOL);
+    expect(vs.spentInWindow.toNumber()).to.be.gte(0.02 * LAMPORTS_PER_SOL);
   });
 
   it("withdraw：累计超过 24h 上限被拒绝（DailyLimitExceeded）", async () => {
-    // 当前窗口已支出 0.25 SOL；再提 9.75 SOL → 累计 10 > 10 上限（金额检查先于余额转移，金库余额无关）
+    // 窗口已支出 ≥0.02；再提 0.07（≤单笔上限 0.1）→ 累计 ≥0.09 > 0.08 上限
     const r = await sendProgramTx(
       program.methods
-        .withdraw(new anchor.BN(9.75 * LAMPORTS_PER_SOL))
+        .withdraw(new anchor.BN(0.07 * LAMPORTS_PER_SOL))
         .accounts({
           agent: agent.publicKey,
           destination: destination.publicKey,
