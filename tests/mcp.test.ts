@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { Keypair, LAMPORTS_PER_SOL, SystemProgram, Transaction } from "@solana/web3.js";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -31,10 +32,25 @@ describe("MCP 服务器（stdio 冒烟测试）", () => {
     expect(names).toContain("get_policy");
   });
 
-  it("validate_transaction 拦截无 purpose 的转账", async () => {
+  it("validate_transaction 拦截无 purpose 的转账(交易必传)", async () => {
+    const wallet = Keypair.generate();
+    const tx = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: wallet.publicKey,
+        toPubkey: Keypair.generate().publicKey,
+        lamports: 50 * LAMPORTS_PER_SOL,
+      }),
+    );
+    tx.feePayer = wallet.publicKey;
+    tx.recentBlockhash = "1".repeat(32); // 测试用占位(32 字节零值的 base58)
     const res = await client.callTool({
       name: "validate_transaction",
-      arguments: { action: "transfer", amount: 50 },
+      arguments: {
+        action: "transfer",
+        amount: 50,
+        wallet: wallet.publicKey.toBase58(),
+        transactionBase64: Buffer.from(tx.serialize({ verifySignatures: false })).toString("base64"),
+      },
     });
     const text = (res.content as { type: string; text: string }[])[0]?.text ?? "";
     const parsed = JSON.parse(text) as {

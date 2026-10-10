@@ -1,6 +1,7 @@
 import { Connection } from "@solana/web3.js";
 import { avoidanceGate } from "./gates/avoidance";
 import { credibilityGate } from "./gates/credibility";
+import { envelopeGate } from "./gates/envelope";
 import { deriveSpendKey, limitsGate, parseAmount } from "./gates/limits";
 import { simulationGate } from "./gates/simulation";
 import { worthGate } from "./gates/worth";
@@ -46,6 +47,7 @@ export class Firewall {
     const decisions: GateDecision[] = [
       credibilityGate(intent, parsed, this.policy),
       await limitsGate(intent, parsed, this.policy),
+      envelopeGate(intent, parsed, this.policy),
       avoidanceGate(intent, parsed, this.policy),
       worthGate(intent, parsed, this.policy),
     ];

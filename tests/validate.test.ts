@@ -50,8 +50,8 @@ describe("validateTransaction 全流程", () => {
     });
     expect(r.shouldProceed).toBe(true);
     expect(r.requiresConfirmation).toBe(false);
-    expect(r.decisions.map((d) => d.verdict)).toEqual(["allow", "allow", "allow", "allow"]);
-    expect(r.decisions.map((d) => d.gate)).toEqual(["credibility", "limits", "avoidance", "worth"]);
+    expect(r.decisions.map((d) => d.verdict)).toEqual(["allow", "allow", "allow", "allow", "allow"]);
+    expect(r.decisions.map((d) => d.gate)).toEqual(["credibility", "limits", "envelope", "avoidance", "worth"]);
     expect(r.summary).toContain("passed");
   });
 

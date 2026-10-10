@@ -67,13 +67,13 @@ function decodeTransaction(encoded: string): Transaction | VersionedTransaction 
 
 const INTENT_SCHEMA = {
   action: z.string().describe('Operation category, e.g. "transfer" | "swap" | "approve"'),
-  amount: z.number().optional().describe("Amount in policy amountUnit (default SOL)"),
+  amount: z.number().optional().describe("Amount in policy amountUnit (default SOL); acts as the declared envelope (upper bound), never as a trusted fact"),
   recipient: z.string().optional().describe("Recipient address"),
   purpose: z.string().optional().describe("Business reason for sensitive actions"),
-  wallet: z.string().optional().describe("Agent wallet address (enables simulation drain verification)"),
+  wallet: z.string().optional().describe("Agent wallet address (enables envelope cross-checks + simulation drain verification)"),
   idempotencyKey: z.string().optional().describe("Deduplicates 24h rolling-spend accounting"),
   programIds: z.array(z.string()).optional().describe("Programs involved in the transaction"),
-  transactionBase64: z.string().optional().describe("Base64-serialized raw transaction (enables deep parse + simulation)"),
+  transactionBase64: z.string().describe("Base64-serialized raw transaction — REQUIRED: the firewall judges parsed/simulated facts, never self-reported declarations alone"),
 };
 
 function intentFrom(args: z.infer<z.ZodObject<typeof INTENT_SCHEMA>>): TransactionIntent {
@@ -86,9 +86,7 @@ function intentFrom(args: z.infer<z.ZodObject<typeof INTENT_SCHEMA>>): Transacti
     idempotencyKey: args.idempotencyKey,
     programIds: args.programIds,
   };
-  if (args.transactionBase64) {
-    intent.transaction = decodeTransaction(args.transactionBase64);
-  }
+  intent.transaction = decodeTransaction(args.transactionBase64);
   return intent;
 }
 

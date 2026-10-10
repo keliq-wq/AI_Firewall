@@ -13,6 +13,7 @@ export {
 export { Firewall, validateTransaction, FirewallOptions } from "./validate";
 export { FirewallPlugin, FirewallPluginExtension, AgentKitLike } from "./agent-kit";
 export { credibilityGate } from "./gates/credibility";
+export { envelopeGate } from "./gates/envelope";
 export { limitsGate, parseAmount } from "./gates/limits";
 export { avoidanceGate } from "./gates/avoidance";
 export { worthGate } from "./gates/worth";
