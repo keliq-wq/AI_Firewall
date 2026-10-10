@@ -118,7 +118,6 @@ docs/                online-testing guide · demo narration guide
 - `docs/THREAT-MODEL.md` — attack vectors × defense mapping, known boundaries
 - `docs/CHAIN-EVIDENCE.md` — live testnet transactions: every rejection is a real on-chain revert
 - `docs/ONLINE-TESTING.md` — environment notes for a specific Windows machine (not needed on Linux/macOS)
-- `docs/演示讲解指南.md` — 3-minute pitch narration script (Chinese)
 
 ## License
 
