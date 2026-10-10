@@ -1,0 +1,60 @@
+{
+  "rpcUrl": "http://127.0.0.1:8896",
+  "contractFindings": {
+    "accountsLimitPerSimulate": "5 (Too many accounts provided; max 5)",
+    "strategy": "chunked simulation, ≤5 addresses per call, merge by index",
+    "preStateLag": "多节点端点前态可能滞后,收集器必须重试,缺前态=CoverageGap"
+  },
+  "err": null,
+  "addressesRequested": 5,
+  "simCalls": 2,
+  "innerInstructionsCount": 0,
+  "logs": [
+    "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]",
+    "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 76 of 200000 compute units",
+    "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success"
+  ],
+  "accounts": [
+    {
+      "address": "7a6YDAL8JgdnhKj3WuWufEK9edgvK76rHuMKvsGHbtVZ",
+      "lamports": 2336320,
+      "dataLen": 2,
+      "dataBase64": [
+        "",
+        "base64"
+      ]
+    },
+    {
+      "address": "FsWaQRZdur8mCgXJ3CXuzKvNpHmxcAbn1Fa9pD73ybFr",
+      "lamports": 1488440,
+      "dataLen": 2,
+      "dataBase64": [
+        "X7sckjpA4Fb8FzHbuN3ghjhDKCPgWHYzxjleAkQ46jRhoIzaNulMC2wfRcqYJNtSlIm5zcIcFGUxHEnw0QHyVIAdLAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "base64"
+      ]
+    },
+    {
+      "address": "8ptm3akfS8WRc47gaaQE2ptgBTr8gdmRR5W2YD1XdtpS",
+      "lamports": 1488440,
+      "dataLen": 2,
+      "dataBase64": [
+        "X7sckjpA4Fb8FzHbuN3ghjhDKCPgWHYzxjleAkQ46jSXws4nUKzGiBk0CBV+n0LSTv/HZFPMvUkI4K3huJjyAYDDyQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "base64"
+      ]
+    },
+    {
+      "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "lamports": 11141440,
+      "dataLen": 2,
+      "dataBase64": [
+        "AgAAACfxkLHTr5i4znFMROjK3/n4/EXLjl+sQgLv+BENl903",
+        "base64"
+      ]
+    },
+    {
+      "address": "7h9YxsgQNX5w4H6dA7CsVFTJQBNgmiWQrMYS426r4NPE",
+      "dataLen": 0,
+      "dataBase64": null
+    }
+  ]
+}
