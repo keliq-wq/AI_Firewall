@@ -13,6 +13,9 @@
 | T5 | **超额/高频支出** | 一次性大额转账,或 24h 内多笔累积超限 | Layer 1 limits 门 + Layer 3 链上窗口 | 单笔上限;24h 滚动支出(内存版;链上版用 Clock 滚动窗口) |
 | T6 | **Agent 私钥泄露** | 攻击者拿到私钥,绕过一切客户端检查直接构造交易 | Layer 3 链上金库 | 资金在 PDA 金库,Agent 密钥对金库零权限;支出必须通过链上身份/限额/白名单/窗口检查 |
 | T7 | **转款到合约地址** | 资金"转入"恶意合约被锁死 | Layer 3 withdraw | 收款方必须是 System 拥有的普通钱包(DestinationNotWallet) |
+| T8 | **CPI 内层隐藏的敏感 token 指令** | Approve/SetAuthority/CloseAccount 被协议通过 CPI 转发,顶层静态分析看不到;攻击者借"正常协议调用"掩盖权限变更 | Layer 2 不变量引擎(I4) | 效果收集器在内层指令扫描(innerInstructions)中按首字节识别 tag(4/6/9)、校验 program ∈ Tokenkeg/Token-2022;命中即 I4 high——顶层不可见的内层操作现形 |
+| T9 | **代币无限授权盗取** | 诱导签名 Approve 把 delegate 额度开到 u64::MAX,随后攻击者清扫账户全部余额 | Layer 2 不变量引擎(I2) | 模拟事实比对(非声明意图):前态/后态 165B 代币账户解码,delegate 出现/更换或 delegatedAmount 增加即判定 Approve,I2 high |
+| T10 | **未声明的代币净流出** | swap 等交易把钱包代币换走,信封未声明该资产,价值静默流失 | Layer 2 不变量引擎(I1) | 每资产净流出上界:模拟前后余额差 amountDelta < 0 且账户归钱包所有 → UNDECLARED_TOKEN_OUTFLOW,high(当前 API 无逐资产声明,任何代币净流出都算越界) |
 
 ## 防御深度设计原则
 
@@ -24,7 +27,7 @@
 
 | 边界 | 说明 | 缓解计划 |
 |---|---|---|
-| Layer 2 对 legacy 交易无 CPI 可见性 | 模拟响应不含内层账户 | 联调强制 V0 交易;SDK 侧提示转换 |
+| legacy 交易无 CPI 可见性(不变量引擎仅 V0) | legacy 旧签名模拟只返回账户状态,不请求也不含 innerInstructions,效果收集器的内层扫描拿不到事实——完整不变量引擎(内层敏感指令 I4 + 分块 addresses 对账)仅对 V0 交易生效 | 联调强制 V0 交易;SDK 侧提示转换 |
 | 24h 滚动支出为内存存储 | SDK 单进程有效,重启清零 | 生产接 Redis/DB(路线图) |
 | 链上窗口用链上 Clock | 时钟由验证器提供,无用户可控漂移风险 | — |
 | 白名单/限额为集中式策略 | 策略由 authority 管理 | TEE 密钥托管 + 策略 UI(路线图⑧) |
