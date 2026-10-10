@@ -118,6 +118,10 @@ export interface DecisionEvent {
   action?: string;
   amount?: number | string;
   recipient?: string;
+  /** 业务理由（worth 门要求声明） */
+  purpose?: string;
+  /** 声明钱包（模拟门据此比对净流出） */
+  wallet?: string;
   /** 自然语言风险摘要 */
   summary: string;
   /** 主要风险发现（最多 5 条，按严重度降序） */

@@ -118,6 +118,8 @@ export class Firewall {
           action: intent.action,
           amount: intent.amount,
           recipient: intent.recipient,
+          purpose: intent.purpose,
+          wallet: intent.wallet,
           summary: result.summary,
           concerns: result.concerns.slice(0, 5).map((c) => ({ id: c.id, severity: c.severity, message: c.message })),
         });

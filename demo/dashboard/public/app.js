@@ -54,6 +54,13 @@
       liveCountDeny: "拦截",
       liveCountEscalate: "确认",
       liveCountAllow: "放行",
+      detailHint: "点击条目展开/收起详情",
+      detailTime: "时间",
+      detailFingerprint: "交易指纹",
+      detailTier: "升级分级",
+      detailPurpose: "业务理由",
+      detailWallet: "钱包",
+      detailConcerns: "全部关切",
     },
     en: {
       brand: "AI Agent Transaction Firewall",
@@ -104,6 +111,13 @@
       liveCountDeny: "blocked",
       liveCountEscalate: "confirm",
       liveCountAllow: "allowed",
+      detailHint: "Click to expand / collapse details",
+      detailTime: "Time",
+      detailFingerprint: "Fingerprint",
+      detailTier: "Tier",
+      detailPurpose: "Purpose",
+      detailWallet: "Wallet",
+      detailConcerns: "All concerns",
     },
   };
 
@@ -268,6 +282,7 @@
 
   /* ── 实时拦截日志(SSE) ── */
   const logEntries = [];
+  const expandedKeys = new Set(); // 展开状态在重渲染/切语言后保留
 
   function liveCountsText() {
     const d = logEntries.filter((e) => e.verdict === "deny").length;
@@ -276,12 +291,25 @@
     return `${t("liveCountDeny")} ${d} · ${t("liveCountEscalate")} ${c} · ${t("liveCountAllow")} ${a}`;
   }
 
+  function logKey(ev) {
+    return `${ev.time}-${ev.fingerprint || "nofp"}`;
+  }
+
   function renderLogEntry(ev) {
     const li = document.createElement("li");
     li.className = "log-entry";
+    li.title = t("detailHint");
+    const key = logKey(ev);
+    const open = expandedKeys.has(key);
     const sevs = (ev.concerns || [])
       .slice(0, 3)
       .map((c) => `<span class="sev ${c.severity}">${t(SEV_KEYS[c.severity] || c.severity)}</span>`)
+      .join("");
+    const fullConcerns = (ev.concerns || [])
+      .map(
+        (c) =>
+          `<li><span class="sev ${c.severity}">${t(SEV_KEYS[c.severity] || c.severity)}</span><span class="msg">${c.message}</span></li>`,
+      )
       .join("");
     li.innerHTML = `
       <span class="l-time">${timeStr(ev.time)}</span>
@@ -289,7 +317,22 @@
       <span class="l-summary">${ev.summary}</span>
       ${ev.action ? `<span class="l-action">${ev.action}${ev.amount != null ? " · " + ev.amount : ""}${ev.recipient ? " → " + short(ev.recipient, 10) : ""}</span>` : ""}
       <span class="l-concerns">${sevs}</span>
-      ${ev.fingerprint ? `<span class="l-fp" title="${ev.fingerprint}">#${short(ev.fingerprint, 10)}</span>` : ""}`;
+      ${ev.fingerprint ? `<span class="l-fp" title="${ev.fingerprint}">#${short(ev.fingerprint, 10)}</span>` : ""}
+      <div class="l-detail" ${open ? "" : "hidden"}>
+        <div class="l-detail-row"><span class="k">${t("detailTime")}</span><span>${new Date(ev.time).toLocaleString()}</span></div>
+        ${ev.fingerprint ? `<div class="l-detail-row"><span class="k">${t("detailFingerprint")}</span><span class="l-fp-full">${ev.fingerprint}</span></div>` : ""}
+        <div class="l-detail-row"><span class="k">${t("detailTier")}</span><span>${ev.tier || "—"}</span></div>
+        ${ev.purpose ? `<div class="l-detail-row"><span class="k">${t("detailPurpose")}</span><span>${ev.purpose}</span></div>` : ""}
+        ${ev.wallet ? `<div class="l-detail-row"><span class="k">${t("detailWallet")}</span><span class="l-fp-full">${ev.wallet}</span></div>` : ""}
+        ${fullConcerns ? `<div class="l-detail-row l-detail-concerns-row"><span class="k">${t("detailConcerns")}</span><ul class="concerns">${fullConcerns}</ul></div>` : ""}
+      </div>`;
+    li.addEventListener("click", () => {
+      const d = li.querySelector(".l-detail");
+      if (!d) return;
+      if (expandedKeys.has(key)) expandedKeys.delete(key);
+      else expandedKeys.add(key);
+      d.hidden = !d.hidden;
+    });
     return li;
   }
 
