@@ -77,6 +77,19 @@ WALLET_KEYPAIR=~/.config/solana/id.json \
   npx tsx scripts/live-attack.ts https://solana-devnet.g.alchemy.com/v2/demo
 ```
 
+## 5. 可视化面板(攻击演示 + 监控,2 合 1)
+
+```bash
+# 前提:rpc-proxy 在跑(node scripts/rpc-proxy.cjs → testnet)
+RPC_URL=http://127.0.0.1:8898 WALLET_KEYPAIR=~/.config/solana/id.json \
+  npx tsx demo/dashboard/server.ts     # 或 npm run dashboard
+# 浏览器打开 http://127.0.0.1:3000
+```
+
+- 五个攻击剧本按钮(owner 钓鱼/超额/静默 drain/黑名单/对照组)→ 实时判定卡(严重度分级关切 + 中文叙述)
+- 侧栏:策略卡、24h 支出仪表、链上状态(程序/金库)、事件时间线
+- 零依赖后端(node:http),剧本定义在 scripts/attack-scenarios.ts(小金额,低余额钱包可跑)
+
 ## 4. 构建与部署速查
 
 - 编译:`cd programs/firewall && cargo build-sbf [--arch v2|v3]` → 输出在**根** `target/deploy/firewall.so`(cargo-build-sbf 4.4 默认 v3、platform-tools v1.57)
