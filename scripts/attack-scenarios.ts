@@ -23,7 +23,9 @@ export interface Scenario {
   id: string;
   icon: string;
   title: string;
+  titleEn: string;
   description: string;
+  descriptionEn: string;
   /** 构造交易与意图；无交易时为纯意图校验 */
   build: (ctx: ScenarioContext) => Promise<{ intent: TransactionIntent; tx?: VersionedTransaction }>;
 }
@@ -55,8 +57,11 @@ export function scenarioDefinitions(ctx: ScenarioContext): Scenario[] {
       id: "owner-phish",
       icon: "🎣",
       title: "Owner 权限钓鱼",
+      titleEn: "Owner Permission Phishing",
       description:
         "诱导 Agent 签署「开通代币账户」交易，实际把金库账户 owner 静默转移给 Token 程序——Solana 特有攻击面",
+      descriptionEn:
+        "Tricks the Agent into signing an \"open token account\" transaction that silently reassigns the treasury account's owner to the Token program — a Solana-specific attack surface",
       build: async () => {
         const treasury = Keypair.generate();
         const rent = await ctx.connection.getMinimumBalanceForRentExemption(0);
@@ -85,7 +90,10 @@ export function scenarioDefinitions(ctx: ScenarioContext): Scenario[] {
       id: "over-limit",
       icon: "💸",
       title: "超额转账",
+      titleEn: "Over-Limit Transfer",
       description: "转账 0.06 SOL（单笔上限 0.05）——第 1 层 limits 门在签名前离线拒绝",
+      descriptionEn:
+        "Transfers 0.06 SOL (per-transaction cap 0.05) — Layer 1 limits gate rejects it offline before signing",
       build: async () => {
         const amount = 0.06 * LAMPORTS_PER_SOL;
         const tx = await buildV0([
@@ -108,8 +116,11 @@ export function scenarioDefinitions(ctx: ScenarioContext): Scenario[] {
       id: "silent-drain",
       icon: "🕳️",
       title: "静默 Drain",
+      titleEn: "Silent Drain",
       description:
         "Agent 被注入伪造意图：声明 0.002 SOL，实际交易转出 0.04——只有第 2 层模拟执行的净流出比对能发现",
+      descriptionEn:
+        "Injected fake intent: declares 0.002 SOL but the transaction drains 0.04 — only Layer 2 simulation's net-outflow comparison can catch it",
       build: async () => {
         const actual = 0.04 * LAMPORTS_PER_SOL;
         const tx = await buildV0([
@@ -132,7 +143,10 @@ export function scenarioDefinitions(ctx: ScenarioContext): Scenario[] {
       id: "blacklist",
       icon: "🚫",
       title: "黑名单协议",
+      titleEn: "Blacklisted Program",
       description: "Agent 被诱导调用已知恶意协议——第 1 层 avoidance 门直接拒绝",
+      descriptionEn:
+        "The Agent is lured into calling a known-malicious program — Layer 1 avoidance gate rejects it outright",
       build: async () => {
         const tx = await buildV0([{ programId: SCAM_PROGRAM, keys: [], data: Buffer.alloc(0) }]);
         return {
@@ -151,7 +165,10 @@ export function scenarioDefinitions(ctx: ScenarioContext): Scenario[] {
       id: "control",
       icon: "✅",
       title: "对照组 · 正常转账",
+      titleEn: "Control · Legit Transfer",
       description: "0.005 SOL 白名单转账、限额内、目的明确——五门全过，放行",
+      descriptionEn:
+        "0.005 SOL allowlisted transfer, within limits, with a stated purpose — all five gates pass",
       build: async () => {
         const amount = 0.005 * LAMPORTS_PER_SOL;
         const tx = await buildV0([

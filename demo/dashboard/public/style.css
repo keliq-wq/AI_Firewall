@@ -55,6 +55,13 @@ body {
   padding: 5px 12px;
 }
 .chip.mono { font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+.lang-btn {
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  transition: border-color 0.15s, color 0.15s;
+}
+.lang-btn:hover { border-color: var(--blue); color: var(--ink); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .dot-ok { background: var(--good); }
 .dot-unknown { background: var(--muted); }

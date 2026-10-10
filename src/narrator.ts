@@ -8,9 +8,35 @@ export interface Narrator {
   explain(intent: TransactionIntent, result: ValidationResult): Promise<string>;
 }
 
-/** 默认实现：确定性模板叙述，完全离线可用，不虚构外部事实 */
+export type NarratorLocale = "zh" | "en";
+
+/** 默认实现：确定性模板叙述，完全离线可用，不虚构外部事实；支持中英双语 */
 export class TemplateNarrator implements Narrator {
+  constructor(private readonly locale: NarratorLocale = "zh") {}
+
   async explain(intent: TransactionIntent, result: ValidationResult): Promise<string> {
+    if (this.locale === "en") {
+      const verdict = result.shouldProceed
+        ? "ALLOWED"
+        : result.requiresConfirmation
+          ? "BLOCKED - human confirmation required"
+          : "BLOCKED";
+      const parts: string[] = [`【${verdict}】`];
+      if (intent.action) parts.push(`Action: ${intent.action}`);
+      if (intent.amount != null) parts.push(`Amount: ${intent.amount}`);
+      if (intent.recipient) parts.push(`Recipient: ${intent.recipient}`);
+      if (intent.purpose) parts.push(`Business purpose: ${intent.purpose}`);
+
+      const critical = result.concerns.filter((c) => c.severity === "critical");
+      const high = result.concerns.filter((c) => c.severity === "high");
+      if (critical.length > 0) parts.push(`Critical risks: ${critical.map((c) => c.message).join("; ")}`);
+      if (high.length > 0) parts.push(`High risks: ${high.map((c) => c.message).join("; ")}`);
+      if (critical.length === 0 && high.length === 0 && result.concerns.length > 0) {
+        parts.push(`Notes: ${result.concerns.slice(0, 3).map((c) => c.message).join("; ")}`);
+      }
+      return parts.join("\n");
+    }
+
     const verdict = result.shouldProceed
       ? "已放行"
       : result.requiresConfirmation

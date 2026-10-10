@@ -22,7 +22,7 @@ import {
   SystemProgram,
   Transaction,
 } from "@solana/web3.js";
-import { Firewall, TransactionIntent, ValidationResult } from "../../src";
+import { Firewall, TransactionIntent, TemplateNarrator } from "../../src";
 import { DASHBOARD_POLICY, SCAM_PROGRAM, scenarioDefinitions } from "../../scripts/attack-scenarios";
 import { confirmHttp, getLatestBlockhashRetry, sendRawTransactionRetry } from "../../scripts/tx-confirm";
 import idl from "../../programs/firewall/target/idl/firewall.json";
@@ -42,10 +42,12 @@ interface EventRecord {
   scenarioId: string;
   icon: string;
   title: string;
+  titleEn: string;
   verdict: string;
   requiresConfirmation: boolean;
   summary: string;
   narration: string;
+  narrationEn: string;
   concerns: { id: string; severity: string; message: string }[];
 }
 
@@ -84,7 +86,8 @@ async function main(): Promise<void> {
     if (!scenario) throw new Error(`未知剧本: ${id}`);
     const { intent } = await scenario.build({ connection, wallet: wallet.publicKey });
     const result = await firewall.validateTransaction(intent);
-    const narration = await firewall.explain(intent, result);
+    const narration = await new TemplateNarrator("zh").explain(intent, result);
+    const narrationEn = await new TemplateNarrator("en").explain(intent, result);
 
     // 放行的金额计入 24h 滚动支出（面板展示用）
     if (result.shouldProceed) {
@@ -98,10 +101,12 @@ async function main(): Promise<void> {
       scenarioId: scenario.id,
       icon: scenario.icon,
       title: scenario.title,
+      titleEn: scenario.titleEn,
       verdict: result.shouldProceed ? "allow" : result.requiresConfirmation ? "escalate" : "deny",
       requiresConfirmation: result.requiresConfirmation,
       summary: result.summary,
       narration,
+      narrationEn,
       concerns: result.concerns.slice(0, 5).map((c) => ({
         id: c.id,
         severity: c.severity,
@@ -194,7 +199,14 @@ async function main(): Promise<void> {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify(
-            scenarios.map((s) => ({ id: s.id, icon: s.icon, title: s.title, description: s.description })),
+            scenarios.map((s) => ({
+              id: s.id,
+              icon: s.icon,
+              title: s.title,
+              titleEn: s.titleEn,
+              description: s.description,
+              descriptionEn: s.descriptionEn,
+            })),
           ),
         );
         return;
