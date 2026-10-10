@@ -20,6 +20,7 @@ import {
   TransactionInstruction,
 } from "@solana/web3.js";
 import { readFileSync, existsSync } from "fs";
+import { confirmHttp, getLatestBlockhashRetry, sendRawTransactionRetry } from "./tx-confirm";
 import { homedir } from "os";
 import { join } from "path";
 
@@ -78,10 +79,10 @@ async function main(): Promise<void> {
       }),
     );
     tx.feePayer = payer.publicKey;
-    tx.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash;
+    tx.recentBlockhash = (await getLatestBlockhashRetry(connection)).blockhash;
     tx.sign(payer);
-    const sig = await connection.sendRawTransaction(tx.serialize());
-    await connection.confirmTransaction(sig, "confirmed");
+    const sig = await sendRawTransactionRetry(connection, tx);
+    await confirmHttp(connection, sig);
     console.log(`  已关闭残留程序账户 ${sig}`);
   } else if (existing) {
     console.error("目标地址已存在非程序账户,部署会冲突;请检查或换 keypair");
@@ -101,10 +102,10 @@ async function main(): Promise<void> {
       }),
     );
     tx.feePayer = payer.publicKey;
-    tx.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash;
+    tx.recentBlockhash = (await getLatestBlockhashRetry(connection)).blockhash;
     tx.sign(payer);
-    const sig = await connection.sendRawTransaction(tx.serialize());
-    await connection.confirmTransaction(sig, "confirmed");
+    const sig = await sendRawTransactionRetry(connection, tx);
+    await confirmHttp(connection, sig);
     console.log(`  已关闭残留 programdata 账户 ${sig}`);
   }
 
@@ -226,10 +227,10 @@ async function main(): Promise<void> {
   );
 
   for (const [i, { tx, signers }] of txs.entries()) {
-    tx.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash;
+    tx.recentBlockhash = (await getLatestBlockhashRetry(connection)).blockhash;
     tx.sign(...signers);
-    const sig = await connection.sendRawTransaction(tx.serialize());
-    await connection.confirmTransaction(sig, "confirmed");
+    const sig = await sendRawTransactionRetry(connection, tx);
+    await confirmHttp(connection, sig);
     if (i % 20 === 0) console.log(`  交易 ${i + 1}/${txs.length} 已确认: ${sig}`);
   }
 

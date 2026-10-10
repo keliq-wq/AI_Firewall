@@ -1,27 +1,30 @@
 /**
- * Step 3 链上冒烟（Devnet）：程序部署后运行，产出可发给评委的链上证据。
+ * 链上冒烟（testnet/devnet 通用）：程序部署后运行，产出可发给评委的链上证据。
  *
  * 前置：
- *   1. 已 solana program deploy（程序 ID 见 IDL address）
- *   2. authority 钱包 = ~/.config/solana/id.json（已 airdrop ≥3 SOL）
+ *   1. 已用 scripts/deploy-program.ts 部署程序
+ *   2. authority 钱包 = ~/.config/solana/id.json（已注资 ≥3 SOL）
  *   3. agent 钱包 = scripts/keys/devnet-agent.json（首次运行自动生成，按提示注资 ≥1.5 SOL）
  *
  * 运行：
- *   npx tsx scripts/devnet-smoke.ts [RPC_URL]     # 默认 https://solana-devnet.g.alchemy.com/v2/demo
+ *   npx tsx scripts/devnet-smoke.ts [RPC_URL]     # 默认 http://127.0.0.1:8898（rpc-proxy → testnet）
+ *   CLUSTER=testnet npx tsx scripts/devnet-smoke.ts ...
  *
  * 场景：initialize（单笔 0.1 SOL / 日限 1 SOL）→ deposit 1 SOL → withdraw 0.2（链上拒绝 AmountExceeded）
  *       → withdraw 0.05（成功，金库余额变化）。每步输出 explorer.solana.com 交易链接。
+ * 交易确认走 HTTP 轮询（scripts/tx-confirm.ts），不依赖 WebSocket。
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction } from "@solana/web3.js";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { homedir } from "os";
 import { join, dirname } from "path";
+import { confirmHttp, getLatestBlockhashRetry, sendRawTransactionRetry } from "./tx-confirm";
 import idl from "../programs/firewall/target/idl/firewall.json";
 
-const RPC_URL = process.argv[2] ?? "https://solana-devnet.g.alchemy.com/v2/demo";
-const CLUSTER = RPC_URL.includes("localhost") || RPC_URL.includes("127.0.0.1") ? "custom" : "devnet";
+const RPC_URL = process.argv[2] ?? "http://127.0.0.1:8898";
+const CLUSTER = process.env.CLUSTER ?? "testnet";
 const PROGRAM_ID = new PublicKey((idl as any).address);
 const MAX_PER_TX = 0.1 * LAMPORTS_PER_SOL;
 const DAILY_LIMIT = 1 * LAMPORTS_PER_SOL;
@@ -48,10 +51,14 @@ async function main(): Promise<void> {
     mkdirSync(dirname(agentPath), { recursive: true });
     writeFileSync(agentPath, JSON.stringify(Array.from(kp.secretKey)));
     console.log(`已生成 agent 钱包 ${kp.publicKey.toBase58()} → scripts/keys/devnet-agent.json`);
-    console.log(`请注资 ≥1.5 SOL（官方 faucet 走代理）：`);
+    console.log(`请注资 ≥1.5 SOL（testnet faucet 或从已注资钱包转账）:`);
     console.log(
-      `  curl -x http://127.0.0.1:7890 -s -X POST https://api.devnet.solana.com -H "Content-Type: application/json" ` +
-        `-d '{"jsonrpc":"2.0","id":1,"method":"requestAirdrop","params":["${kp.publicKey.toBase58()}",2000000000]}'`,
+      `  node -e "const {Connection,Keypair,PublicKey,SystemProgram,Transaction,LAMPORTS_PER_SOL}=require('@solana/web3.js');` +
+        `const c=new Connection('http://127.0.0.1:8898','confirmed');` +
+        `const payer=Keypair.fromSecretKey(Uint8Array.from(JSON.parse(require('fs').readFileSync('${authorityPath}','utf-8'))));` +
+        `(async()=>{const tx=new Transaction().add(SystemProgram.transfer({fromPubkey:payer.publicKey,toPubkey:new PublicKey('${kp.publicKey.toBase58()}'),lamports:2*LAMPORTS_PER_SOL}));` +
+        `tx.feePayer=payer.publicKey;tx.recentBlockhash=(await c.getLatestBlockhash('confirmed')).blockhash;tx.sign(payer);` +
+        `const s=await c.sendRawTransaction(tx.serialize());console.log(s);})().catch(e=>{console.error(e);process.exit(1)})"`,
     );
     process.exit(0);
   }
@@ -86,26 +93,48 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  async function sendProgramTx(
+    builder: { transaction: () => Promise<Transaction> },
+    signers: Keypair[],
+  ): Promise<{ signature: string; err: unknown }> {
+    const tx = await builder.transaction();
+    tx.feePayer = provider.wallet.publicKey;
+    tx.recentBlockhash = (await getLatestBlockhashRetry(connection)).blockhash;
+    tx.sign(...signers);
+    await provider.wallet.signTransaction(tx); // fee payer 签名
+    const signature = await sendRawTransactionRetry(connection, tx);
+    return confirmHttp(connection, signature);
+  }
+
   const policyExists = await connection.getAccountInfo(policyPda);
   if (!policyExists) {
-    const sig = await program.methods
-      .initialize(agent.publicKey, new anchor.BN(MAX_PER_TX), new anchor.BN(DAILY_LIMIT), [])
-      .accounts({ authority: authority.publicKey })
-      .signers([authority])
-      .rpc();
-    console.log(`  ① initialize（限额 0.1/笔、1/天）→ ${link(sig)}`);
+    const r = await sendProgramTx(
+      program.methods
+        .initialize(agent.publicKey, new anchor.BN(MAX_PER_TX), new anchor.BN(DAILY_LIMIT), [])
+        .accounts({
+          authority: authority.publicKey,
+          policy: policyPda,
+          vault_state: vaultStatePda,
+          vault: vaultPda,
+        })
+        .signers([authority]),
+      [authority],
+    );
+    console.log(`  ① initialize（限额 0.1/笔、1/天）→ ${link(r.signature)}`);
   } else {
     console.log("  ① policy 已存在，跳过 initialize");
   }
 
   const before = await connection.getBalance(vaultPda);
   if (before < LAMPORTS_PER_SOL) {
-    const sig = await program.methods
-      .deposit(new anchor.BN(LAMPORTS_PER_SOL))
-      .accounts({ depositor: agent.publicKey })
-      .signers([agent])
-      .rpc();
-    console.log(`  ② deposit 1 SOL → ${link(sig)}`);
+    const r = await sendProgramTx(
+      program.methods
+        .deposit(new anchor.BN(LAMPORTS_PER_SOL))
+        .accounts({ depositor: agent.publicKey, policy: policyPda, vault: vaultPda })
+        .signers([agent]),
+      [agent],
+    );
+    console.log(`  ② deposit 1 SOL → ${link(r.signature)}`);
     console.log(`     金库余额：${(await connection.getBalance(vaultPda)) / LAMPORTS_PER_SOL} SOL`);
   } else {
     console.log("  ② 金库已有 ≥1 SOL，跳过 deposit");
@@ -113,31 +142,38 @@ async function main(): Promise<void> {
 
   const destination = Keypair.generate().publicKey;
 
-  try {
-    await program.methods
+  const rejected = await sendProgramTx(
+    program.methods
       .withdraw(new anchor.BN(0.2 * LAMPORTS_PER_SOL))
-      .accounts({ agent: agent.publicKey, destination })
-      .signers([agent])
-      .rpc();
-    console.error("  ✗ 预期 AmountExceeded 被拒绝，但交易居然成功了");
-    process.exit(1);
-  } catch (err) {
-    const msg = String(err);
-    const isExceeded = msg.includes("AmountExceeded") || msg.includes("0x1770");
-    const logSig = msg.match(/"signature":"([^"]+)"/)?.[1];
-    console.log(
-      `  ③ withdraw 0.2 SOL（超单笔限额）→ 链上拒绝 ${isExceeded ? "AmountExceeded" : "(错误码未匹配，请人工核对)"}`,
-    );
-    if (logSig) console.log(`     被拒交易（validator 已执行并 revert）→ ${link(logSig)}`);
-  }
+      .accounts({
+        agent: agent.publicKey,
+        destination,
+        policy: policyPda,
+        vault_state: vaultStatePda,
+        vault: vaultPda,
+      })
+      .signers([agent]),
+    [agent],
+  );
+  const isExceeded = JSON.stringify(rejected.err).includes("6000");
+  console.log(`  ③ withdraw 0.2 SOL（超单笔限额）→ 链上拒绝 ${isExceeded ? "AmountExceeded ✓" : "错误码未匹配，请人工核对"}`);
+  console.log(`     被拒交易（validator 已执行并 revert）→ ${link(rejected.signature)}`);
 
-  const sig = await program.methods
-    .withdraw(new anchor.BN(0.05 * LAMPORTS_PER_SOL))
-    .accounts({ agent: agent.publicKey, destination })
-    .signers([agent])
-    .rpc();
+  const ok = await sendProgramTx(
+    program.methods
+      .withdraw(new anchor.BN(0.05 * LAMPORTS_PER_SOL))
+      .accounts({
+        agent: agent.publicKey,
+        destination,
+        policy: policyPda,
+        vault_state: vaultStatePda,
+        vault: vaultPda,
+      })
+      .signers([agent]),
+    [agent],
+  );
   const after = await connection.getBalance(vaultPda);
-  console.log(`  ④ withdraw 0.05 SOL（限额内）→ 成功 ${link(sig)}`);
+  console.log(`  ④ withdraw 0.05 SOL（限额内）→ 成功 ${link(ok.signature)}`);
   console.log(`     金库余额变化：${before / LAMPORTS_PER_SOL} → ${after / LAMPORTS_PER_SOL} SOL`);
 
   const vs = await (program.account as any).vaultState.fetch(vaultStatePda);

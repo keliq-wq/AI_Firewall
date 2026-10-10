@@ -24,6 +24,7 @@ import {
 } from "@solana/web3.js";
 import { Firewall, TransactionIntent } from "../src";
 import { existsSync, readFileSync } from "fs";
+import { confirmHttp, getLatestBlockhashRetry, sendRawTransactionRetry } from "./tx-confirm";
 import { homedir } from "os";
 import { join } from "path";
 
@@ -65,14 +66,14 @@ async function main(): Promise<void> {
         }),
       );
       tx.feePayer = faucet.publicKey;
-      tx.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash;
+      tx.recentBlockhash = (await getLatestBlockhashRetry(connection)).blockhash;
       tx.sign(faucet);
-      const sig = await connection.sendRawTransaction(tx.serialize());
-      await connection.confirmTransaction(sig, "confirmed");
+      const sig = await sendRawTransactionRetry(connection, tx);
+      await confirmHttp(connection, sig);
       console.log(`  新钱包 ${wallet.publicKey.toBase58()} 已注资 10 SOL（faucet keypair 转账）`);
     } else {
       const sig = await connection.requestAirdrop(wallet.publicKey, 10 * LAMPORTS_PER_SOL);
-      await connection.confirmTransaction(sig, "confirmed");
+      await confirmHttp(connection, sig);
       console.log(`  新钱包 ${wallet.publicKey.toBase58()} 已 airdrop 10 SOL`);
     }
   } else {
@@ -93,7 +94,7 @@ async function main(): Promise<void> {
   );
 
   async function buildV0(instructions: TransactionInstruction[]): Promise<VersionedTransaction> {
-    const { blockhash } = await connection.getLatestBlockhash("confirmed");
+    const { blockhash } = await getLatestBlockhashRetry(connection);
     return new VersionedTransaction(
       new TransactionMessage({
         payerKey: wallet.publicKey,

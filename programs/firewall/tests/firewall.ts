@@ -1,16 +1,28 @@
 /**
- * 第 3 层集成测试（需要：已构建的程序 + 本地验证者）。
- * 运行：anchor test（solana-test-validator）或 Anchor 1.0 的 Surfpool。
+ * 第 3 层集成测试（需要：已部署的程序 + 任意 RPC）。
+ * 运行（本地验证器或 testnet/devnet 经 rpc-proxy）：
+ *   ANCHOR_PROVIDER_URL=<rpc> ANCHOR_WALLET=~/.config/solana/id.json \
+ *   FAUCET_KEYPAIR=<已注资钱包> npx ts-mocha -t 1000000 programs/firewall/tests/firewall.ts
  *
- * 注意：Anchor 1.0 客户端侧推荐 @anchor-lang/core（替代 @coral-xyz/anchor），
- * 运行时请按本机 anchor 版本模板调整导入。
+ * 全部交易走手动 send + HTTP 轮询确认（scripts/tx-confirm.ts）：
+ * 经本地 rpc-proxy 转发时 WebSocket 订阅对「订阅前已处理」的交易不补发通知，竞态必输。
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { expect } from "chai";
 import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
+import { confirmHttp, getLatestBlockhashRetry, sendRawTransactionRetry } from "../../../scripts/tx-confirm";
 import idl from "../target/idl/firewall.json";
+
+// 链上错误码（errors.rs 顺序 + anchor 6000 偏移）
+const CODE = {
+  AmountExceeded: 6000,
+  ZeroAmount: 6001,
+  DailyLimitExceeded: 6002,
+  ProgramNotAllowed: 6003,
+  UnauthorizedAgent: 6004,
+} as const;
 
 describe("firewall（第 3 层：链上策略强制金库）", () => {
   const provider = anchor.AnchorProvider.env();
@@ -20,9 +32,8 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
   const program = new Program(idl as any, provider);
 
   /**
-   * 注资：优先用 FAUCET_KEYPAIR（本地验证器的 faucet 密钥，创世即有巨额余额）直接转账——
-   * Windows 上 test-validator 的 requestAirdrop 有已知 bug（RPC 拨 0.0.0.0:9900 → WSAEADDRNOTAVAIL），
-   * 一律返回 Internal error。未配置时回退到 requestAirdrop（devnet 场景）。
+   * 注资：优先用 FAUCET_KEYPAIR（本地验证器的 faucet 密钥 / testnet 已注资钱包）直接转账——
+   * Windows 上 test-validator 的 requestAirdrop 有已知 bug，一律 Internal error。
    */
   let faucet: Keypair | null = null;
   if (process.env.FAUCET_KEYPAIR && existsSync(process.env.FAUCET_KEYPAIR)) {
@@ -36,18 +47,49 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
         SystemProgram.transfer({ fromPubkey: faucet.publicKey, toPubkey: pubkey, lamports }),
       );
       tx.feePayer = faucet.publicKey;
-      tx.recentBlockhash = (await provider.connection.getLatestBlockhash("confirmed")).blockhash;
+      tx.recentBlockhash = (await getLatestBlockhashRetry(provider.connection)).blockhash;
       tx.sign(faucet);
-      const sig = await provider.connection.sendRawTransaction(tx.serialize());
-      await provider.connection.confirmTransaction(sig, "confirmed");
+      const sig = await sendRawTransactionRetry(provider.connection, tx);
+      const r = await confirmHttp(provider.connection, sig);
+      if (r.err) {
+        throw new Error(`注资失败 ${pubkey.toBase58()}: ${JSON.stringify(r.err)}`);
+      }
     } else {
       const sig = await provider.connection.requestAirdrop(pubkey, lamports);
-      await provider.connection.confirmTransaction(sig);
+      await confirmHttp(provider.connection, sig);
     }
   }
 
-  const authority = Keypair.generate();
-  const agent = Keypair.generate();
+  /** anchor 指令构建器 → 手动签名发送 + HTTP 确认；返回 { signature, err }（链上失败不抛） */
+  async function sendProgramTx(
+    builder: { transaction: () => Promise<Transaction> },
+    signers: Keypair[],
+  ): Promise<{ signature: string; err: unknown }> {
+    const tx = await builder.transaction();
+    tx.feePayer = provider.wallet.publicKey;
+    tx.recentBlockhash = (await getLatestBlockhashRetry(provider.connection)).blockhash;
+    tx.sign(...signers);
+    await provider.wallet.signTransaction(tx); // fee payer 签名
+    const signature = await sendRawTransactionRetry(provider.connection, tx);
+    return confirmHttp(provider.connection, signature);
+  }
+
+  // 持久化 authority/agent 密钥（scripts/keys/）：重跑时复用余额，避免每次烧新 SOL
+  const keysDir = `${__dirname}/../../../scripts/keys`;
+  function loadOrCreateKey(name: string): Keypair {
+    const path = `${keysDir}/${name}.json`;
+    if (existsSync(path)) {
+      return Keypair.fromSecretKey(
+        Uint8Array.from(JSON.parse(readFileSync(path, "utf-8")) as number[]),
+      );
+    }
+    const kp = Keypair.generate();
+    mkdirSync(keysDir, { recursive: true });
+    writeFileSync(path, JSON.stringify(Array.from(kp.secretKey)));
+    return kp;
+  }
+  const authority = loadOrCreateKey("test-authority");
+  const agent = loadOrCreateKey("test-agent");
   const destination = Keypair.generate();
 
   const [policyPda] = PublicKey.findProgramAddressSync(
@@ -65,95 +107,141 @@ describe("firewall（第 3 层：链上策略强制金库）", () => {
 
   const MAX_PER_TX = 5 * LAMPORTS_PER_SOL;
   const DAILY_LIMIT = 10 * LAMPORTS_PER_SOL;
+  const DEPOSIT = 0.5 * LAMPORTS_PER_SOL;
 
   before(async () => {
-    // 注资按需精简(devnet 水龙头限流):authority 覆盖初始化租金+费用,agent 覆盖 deposit 1 SOL+费用
-    await fund(authority.publicKey, 2 * LAMPORTS_PER_SOL);
-    await fund(agent.publicKey, 2 * LAMPORTS_PER_SOL);
-    await program.methods
-      .initialize(agent.publicKey, new anchor.BN(MAX_PER_TX), new anchor.BN(DAILY_LIMIT), [])
-      .accounts({ authority: authority.publicKey })
-      .signers([authority])
-      .rpc();
+    // 注资最小化(水龙头限流严重):authority 只覆盖 PDA 租金+费用,agent 覆盖 deposit 0.5+费用
+    const [authBal, agentBal] = await Promise.all([
+      provider.connection.getBalance(authority.publicKey),
+      provider.connection.getBalance(agent.publicKey),
+    ]);
+    if (authBal < 0.1 * LAMPORTS_PER_SOL) await fund(authority.publicKey, 0.1 * LAMPORTS_PER_SOL);
+    if (agentBal < 0.55 * LAMPORTS_PER_SOL) await fund(agent.publicKey, 0.55 * LAMPORTS_PER_SOL);
+    // 幂等：policy 已存在则跳过初始化（持久化密钥重跑场景）
+    const policyExists = await provider.connection.getAccountInfo(policyPda);
+    if (!policyExists) {
+      const r = await sendProgramTx(
+        program.methods
+          .initialize(agent.publicKey, new anchor.BN(MAX_PER_TX), new anchor.BN(DAILY_LIMIT), [])
+          .accounts({
+            authority: authority.publicKey,
+            policy: policyPda,
+            vault_state: vaultStatePda,
+            vault: vaultPda,
+          })
+          .signers([authority]),
+        [authority],
+      );
+      expect(r.err).to.eq(null);
+    }
   });
 
   it("deposit：Agent 入金成功，金库余额增加", async () => {
-    await program.methods
-      .deposit(new anchor.BN(LAMPORTS_PER_SOL))
-      .accounts({ depositor: agent.publicKey })
-      .signers([agent])
-      .rpc();
+    // 幂等：金库余额已够则跳过入金（重跑不重复烧 SOL）
+    const vaultBal = await provider.connection.getBalance(vaultPda);
+    if (vaultBal < DEPOSIT) {
+      const r = await sendProgramTx(
+        program.methods
+          .deposit(new anchor.BN(DEPOSIT))
+          .accounts({ depositor: agent.publicKey, policy: policyPda, vault: vaultPda })
+          .signers([agent]),
+        [agent],
+      );
+      expect(r.err).to.eq(null);
+    }
     const balance = await provider.connection.getBalance(vaultPda);
-    expect(balance).to.eq(LAMPORTS_PER_SOL);
+    expect(balance).to.be.gte(DEPOSIT);
   });
 
   it("withdraw：超单笔限额被链上拒绝（AmountExceeded）", async () => {
-    try {
-      await program.methods
+    const r = await sendProgramTx(
+      program.methods
         .withdraw(new anchor.BN(MAX_PER_TX + 1))
-        .accounts({ agent: agent.publicKey, destination: destination.publicKey })
-        .signers([agent])
-        .rpc();
-      expect.fail("should have thrown");
-    } catch (err) {
-      expect(String(err)).to.contain("AmountExceeded");
-    }
+        .accounts({
+          agent: agent.publicKey,
+          destination: destination.publicKey,
+          policy: policyPda,
+          vault_state: vaultStatePda,
+          vault: vaultPda,
+        })
+        .signers([agent]),
+      [agent],
+    );
+    expect(JSON.stringify(r.err)).to.contain(String(CODE.AmountExceeded));
   });
 
   it("withdraw：非登记 Agent 被拒绝（密钥对金库零权限）", async () => {
     const attacker = Keypair.generate();
-    await fund(attacker.publicKey, 0.5 * LAMPORTS_PER_SOL);
-    try {
-      await program.methods
+    await fund(attacker.publicKey, 0.02 * LAMPORTS_PER_SOL);
+    const r = await sendProgramTx(
+      program.methods
         .withdraw(new anchor.BN(1000))
-        .accounts({ agent: attacker.publicKey, destination: destination.publicKey })
-        .signers([attacker])
-        .rpc();
-      expect.fail("should have thrown");
-    } catch (err) {
-      expect(String(err)).to.contain("UnauthorizedAgent");
-    }
+        .accounts({
+          agent: attacker.publicKey,
+          destination: destination.publicKey,
+          policy: policyPda,
+          vault_state: vaultStatePda,
+          vault: vaultPda,
+        })
+        .signers([attacker]),
+      [attacker],
+    );
+    expect(JSON.stringify(r.err)).to.contain(String(CODE.UnauthorizedAgent));
   });
 
   it("withdraw：限额内成功，滚动窗口记账更新", async () => {
-    await program.methods
-      .withdraw(new anchor.BN(LAMPORTS_PER_SOL))
-      .accounts({ agent: agent.publicKey, destination: destination.publicKey })
-      .signers([agent])
-      .rpc();
+    const r = await sendProgramTx(
+      program.methods
+        .withdraw(new anchor.BN(0.25 * LAMPORTS_PER_SOL))
+        .accounts({
+          agent: agent.publicKey,
+          destination: destination.publicKey,
+          policy: policyPda,
+          vault_state: vaultStatePda,
+          vault: vaultPda,
+        })
+        .signers([agent]),
+      [agent],
+    );
+    expect(r.err).to.eq(null);
     const vs = await (program.account as any).vaultState.fetch(vaultStatePda);
-    expect(vs.spentInWindow.toNumber()).to.eq(LAMPORTS_PER_SOL);
+    expect(vs.spentInWindow.toNumber()).to.be.gte(0.25 * LAMPORTS_PER_SOL);
   });
 
   it("withdraw：累计超过 24h 上限被拒绝（DailyLimitExceeded）", async () => {
-    // 当前窗口已支出 1 SOL；再提 9.5 SOL → 累计 10.5 > 10 上限
-    try {
-      await program.methods
-        .withdraw(new anchor.BN(9.5 * LAMPORTS_PER_SOL))
-        .accounts({ agent: agent.publicKey, destination: destination.publicKey })
-        .signers([agent])
-        .rpc();
-      expect.fail("should have thrown");
-    } catch (err) {
-      expect(String(err)).to.contain("DailyLimitExceeded");
-    }
+    // 当前窗口已支出 0.25 SOL；再提 9.75 SOL → 累计 10 > 10 上限（金额检查先于余额转移，金库余额无关）
+    const r = await sendProgramTx(
+      program.methods
+        .withdraw(new anchor.BN(9.75 * LAMPORTS_PER_SOL))
+        .accounts({
+          agent: agent.publicKey,
+          destination: destination.publicKey,
+          policy: policyPda,
+          vault_state: vaultStatePda,
+          vault: vaultPda,
+        })
+        .signers([agent]),
+      [agent],
+    );
+    expect(JSON.stringify(r.err)).to.contain(String(CODE.DailyLimitExceeded));
   });
 
   it("execute：非白名单协议被拒绝（ProgramNotAllowed）", async () => {
     const rogue = Keypair.generate().publicKey;
-    try {
-      await program.methods
+    const r = await sendProgramTx(
+      program.methods
         .execute(new anchor.BN(1000), Buffer.alloc(0))
         .accounts({
           agent: agent.publicKey,
           targetProgram: rogue,
           destination: destination.publicKey,
+          policy: policyPda,
+          vault_state: vaultStatePda,
+          vault: vaultPda,
         })
-        .signers([agent])
-        .rpc();
-      expect.fail("should have thrown");
-    } catch (err) {
-      expect(String(err)).to.contain("ProgramNotAllowed");
-    }
+        .signers([agent]),
+      [agent],
+    );
+    expect(JSON.stringify(r.err)).to.contain(String(CODE.ProgramNotAllowed));
   });
 });
