@@ -47,6 +47,7 @@ describe("validateTransaction 全流程", () => {
       purpose: "Payment for NFT purchase",
       recipient: Keypair.generate().publicKey.toBase58(),
       idempotencyKey: "benign-1",
+      wallet: Keypair.generate().publicKey.toBase58(),
     });
     expect(r.shouldProceed).toBe(true);
     expect(r.requiresConfirmation).toBe(false);

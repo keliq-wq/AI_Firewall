@@ -33,10 +33,14 @@ export const INVARIANT_ERROR_CODES: Record<number, string> = {
   6012: "I2",
 };
 
-export function runInvariants(report: EffectReport, wallet?: string): InvariantViolation[] {
+export function runInvariants(
+  report: EffectReport,
+  wallet?: string,
+  strictTokenOutflow = false,
+): InvariantViolation[] {
   const out: InvariantViolation[] = [];
 
-  // I2:权限零突变
+  // I2:权限零突变(有方向性:授权=拦截,撤销=信息)
   for (const d of report.tokenDeltas) {
     if (d.approveDetected) {
       out.push({
@@ -50,6 +54,13 @@ export function runInvariants(report: EffectReport, wallet?: string): InvariantV
           postDelegate: d.post?.delegate?.toBase58() ?? null,
           delegatedAmountDelta: (d.post?.delegatedAmount ?? 0n) - (d.pre?.delegatedAmount ?? 0n) + "",
         },
+      });
+    } else if (d.delegateRevoked) {
+      out.push({
+        invariant: "I2",
+        severity: "low",
+        message: `Delegate revoked on token account ${d.account} — security cleanup, informational`,
+        details: { account: d.account },
       });
     }
     if (d.closeAuthorityChanged) {
@@ -71,13 +82,15 @@ export function runInvariants(report: EffectReport, wallet?: string): InvariantV
   }
 
   // I1:代币净流出(钱包所有)
+  // 审计响应:默认 strict 会否认一切代币业务(swap 必然代币流出)。
+  // strictTokenOutflow=false → medium(escalate 人工确认);true → high(deny)。
   const walletOutflows = report.tokenDeltas.filter(
     (d) => d.amountDelta < 0n && (!wallet || d.owner === wallet),
   );
   if (walletOutflows.length > 0) {
     out.push({
       invariant: "I1",
-      severity: "high",
+      severity: strictTokenOutflow ? "high" : "medium",
       message: `Simulation reveals token outflows with no per-asset declaration: ${walletOutflows
         .map((d) => `${d.mint.slice(0, 8)}… -${d.amountDelta}`)
         .join(", ")} — token value leaves the wallet beyond the declared envelope`,

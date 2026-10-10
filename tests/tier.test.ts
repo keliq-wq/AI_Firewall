@@ -12,6 +12,13 @@ function transferTx(lamports: number): Transaction {
   return tx;
 }
 
+function transferTxFrom(from: PublicKey, lamports: number): Transaction {
+  const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: from, toPubkey: RECIPIENT, lamports }));
+  tx.feePayer = from;
+  tx.recentBlockhash = "1".repeat(32);
+  return tx;
+}
+
 describe("升级分级(tier)与指纹", () => {
   it("旗舰场景 deny → tier=deny 且指纹非空", async () => {
     const fw = new Firewall();
@@ -28,11 +35,12 @@ describe("升级分级(tier)与指纹", () => {
     expect(r.fingerprint).not.toBeNull();
   });
 
-  it("纯意图无交易 → tier=info 且指纹为空", async () => {
+  it("纯意图无交易无钱包 → 升级人工确认(tier=notice)且指纹为空", async () => {
     const fw = new Firewall({ maxTransactionAmount: 1000, confirmationThreshold: 1000 });
     const r = await fw.validateTransaction({ action: "transfer", amount: 1, purpose: "Pay" });
-    expect(r.shouldProceed).toBe(true);
-    expect(r.tier).toBe("info");
+    expect(r.shouldProceed).toBe(false);
+    expect(r.requiresConfirmation).toBe(true);
+    expect(r.tier).toBe("notice"); // WALLET_UNDECLARED medium——无交易无钱包不再静默放行
     expect(r.fingerprint).toBeNull();
   });
 
@@ -67,8 +75,24 @@ describe("升级分级(tier)与指纹", () => {
 
   it("升级占比统计(stats)累进", async () => {
     const fw = new Firewall({ maxTransactionAmount: 2000, confirmationThreshold: 1000, dailyLimit: 5000 });
-    await fw.validateTransaction({ action: "transfer", amount: 1, purpose: "a" }); // allow → info
-    await fw.validateTransaction({ action: "transfer", amount: 1500, purpose: "b" }); // >确认阈值 → notice
+    const w1 = Keypair.generate();
+    const w2 = Keypair.generate();
+    await fw.validateTransaction({
+      action: "transfer",
+      amount: 1,
+      recipient: RECIPIENT.toBase58(),
+      purpose: "a",
+      wallet: w1.publicKey.toBase58(),
+      transaction: transferTxFrom(w1.publicKey, 1 * LAMPORTS_PER_SOL),
+    }); // allow → info
+    await fw.validateTransaction({
+      action: "transfer",
+      amount: 1500,
+      recipient: RECIPIENT.toBase58(),
+      purpose: "b",
+      wallet: w2.publicKey.toBase58(),
+      transaction: transferTxFrom(w2.publicKey, 1500 * LAMPORTS_PER_SOL),
+    }); // >确认阈值 → notice
     const s = fw.stats;
     expect(s.validations).toBe(2);
     expect(s.tiers.info).toBe(1);

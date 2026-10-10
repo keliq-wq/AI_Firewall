@@ -15,6 +15,7 @@ export interface ResolvedPolicy {
   requirePurposeAbove: number;
   scope: string;
   simulationFeeTolerance: number;
+  strictTokenOutflow: boolean;
   store: SpendStore;
   timeProvider: () => number;
 }
@@ -38,6 +39,7 @@ export function resolvePolicy(overrides: Partial<FirewallPolicy> = {}): Resolved
     requirePurposeAbove: overrides.requirePurposeAbove ?? Number.POSITIVE_INFINITY,
     scope: overrides.scope ?? "default",
     simulationFeeTolerance: overrides.simulationFeeTolerance ?? 0.05,
+    strictTokenOutflow: overrides.strictTokenOutflow ?? false,
     store: overrides.store ?? new InMemorySpendStore(),
     timeProvider: overrides.timeProvider ?? (() => Date.now()),
   };

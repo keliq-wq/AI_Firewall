@@ -152,6 +152,7 @@ describe("V0 对照验收：SPL 代币 drain 被 I1 不变量拦截（探针的 
         confirmationThreshold: 1_000_000,
         dailyLimit: 100_000_000,
         simulationFeeTolerance: 5000,
+        strictTokenOutflow: true, // 审计响应:严格代币流出模式(I1=high/deny)
       },
       { connection: fake as unknown as Connection },
     );

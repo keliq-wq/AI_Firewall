@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 import { InMemorySpendStore } from "../src/store";
 import { Firewall } from "../src/validate";
 
+const LEDGER_WALLET = Keypair.generate();
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
 /** SPL Transfer (type 3)：keys = [source, destination, authority]；amount 为 raw u64 */
@@ -61,7 +62,7 @@ describe("24h 滚动支出账本（探针 [3]/[3b] 反转）", () => {
     expect(r.decisions.every((d) => d.verdict !== "deny")).toBe(true);
   });
 
-  it("[3] 未声明金额的 4x400 SOL（交易字节各异）→ 从第 2 笔起累积拦截，store=400", async () => {
+  it("[3] 4x400 SOL 声明转账（交易字节各异）→ 从第 2 笔起累积拦截，store=400", async () => {
     const store = new InMemorySpendStore();
     const fw = new Firewall({
       store,
@@ -70,12 +71,16 @@ describe("24h 滚动支出账本（探针 [3]/[3b] 反转）", () => {
       dailyLimit: 500,
     });
     const to = Keypair.generate().publicKey;
+    const from1 = Keypair.generate();
+    const from2 = Keypair.generate();
 
-    // 第 1 笔：声明缺失 → recordSpend 用解析转出额(400 SOL)兜底记账 → allow
+    // 第 1 笔：声明 400 → 记账 400 → allow
     const r1 = await fw.validateTransaction({
       action: "transfer",
+      amount: 400,
       purpose: "payment",
-      transaction: nativeTx(Keypair.generate().publicKey, to, 400 * LAMPORTS_PER_SOL),
+      wallet: from1.publicKey.toBase58(),
+      transaction: nativeTx(from1.publicKey, to, 400 * LAMPORTS_PER_SOL),
     });
     expect(r1.shouldProceed).toBe(true);
     expect(r1.tier).toBe("info");
@@ -84,8 +89,10 @@ describe("24h 滚动支出账本（探针 [3]/[3b] 反转）", () => {
     // 第 2 笔：指纹不同（from 各异）→ 支出累积 400+400 > 500 → deny
     const r2 = await fw.validateTransaction({
       action: "transfer",
+      amount: 400,
       purpose: "payment",
-      transaction: nativeTx(Keypair.generate().publicKey, to, 400 * LAMPORTS_PER_SOL),
+      wallet: from2.publicKey.toBase58(),
+      transaction: nativeTx(from2.publicKey, to, 400 * LAMPORTS_PER_SOL),
     });
     expect(r2.shouldProceed).toBe(false);
     expect(r2.concerns.some((c) => c.id === "DAILY_LIMIT_EXCEEDED")).toBe(true);
@@ -93,15 +100,21 @@ describe("24h 滚动支出账本（探针 [3]/[3b] 反转）", () => {
     expect(r2.fingerprint).not.toBe(r1.fingerprint);
 
     // 第 3、4 笔保持拦截
+    const from3 = Keypair.generate();
+    const from4 = Keypair.generate();
     const r3 = await fw.validateTransaction({
       action: "transfer",
+      amount: 400,
       purpose: "payment",
-      transaction: nativeTx(Keypair.generate().publicKey, to, 400 * LAMPORTS_PER_SOL),
+      wallet: from3.publicKey.toBase58(),
+      transaction: nativeTx(from3.publicKey, to, 400 * LAMPORTS_PER_SOL),
     });
     const r4 = await fw.validateTransaction({
       action: "transfer",
+      amount: 400,
       purpose: "payment",
-      transaction: nativeTx(Keypair.generate().publicKey, to, 400 * LAMPORTS_PER_SOL),
+      wallet: from4.publicKey.toBase58(),
+      transaction: nativeTx(from4.publicKey, to, 400 * LAMPORTS_PER_SOL),
     });
     expect([r1.shouldProceed, r2.shouldProceed, r3.shouldProceed, r4.shouldProceed]).toEqual([
       true,
@@ -128,12 +141,14 @@ describe("24h 滚动支出账本（探针 [3]/[3b] 反转）", () => {
       amount: 400,
       purpose: "p",
       idempotencyKey: "k1",
+      wallet: LEDGER_WALLET.publicKey.toBase58(),
     });
     const a2 = await fw.validateTransaction({
       action: "transfer",
       amount: 400,
       purpose: "p",
       idempotencyKey: "k2",
+      wallet: LEDGER_WALLET.publicKey.toBase58(),
     });
 
     expect(a1.shouldProceed).toBe(true);

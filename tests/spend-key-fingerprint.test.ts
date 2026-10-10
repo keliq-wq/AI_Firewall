@@ -62,6 +62,7 @@ describe("支出键 = 交易内容指纹（探针 A2/B/C 反转）", () => {
         amount: 200,
         recipient: Keypair.generate().publicKey.toBase58(),
         purpose: "recurring payment",
+        wallet: Keypair.generate().publicKey.toBase58(), // 声明 wallet,封死 WALLET_UNDECLARED 噪声
       });
       results.push({
         shouldProceed: r.shouldProceed,
@@ -93,6 +94,7 @@ describe("支出键 = 交易内容指纹（探针 A2/B/C 反转）", () => {
       recipient,
       purpose: "p1",
       idempotencyKey: "k1",
+      wallet: Keypair.generate().publicKey.toBase58(),
     });
     const c2 = await fw.validateTransaction({
       action: "transfer",
@@ -100,6 +102,7 @@ describe("支出键 = 交易内容指纹（探针 A2/B/C 反转）", () => {
       recipient,
       purpose: "p2",
       idempotencyKey: "k2",
+      wallet: Keypair.generate().publicKey.toBase58(),
     });
 
     expect(c1.shouldProceed).toBe(true);
@@ -122,6 +125,7 @@ describe("支出键 = 交易内容指纹（探针 A2/B/C 反转）", () => {
       recipient: Keypair.generate().publicKey.toBase58(),
       purpose: "retry",
       idempotencyKey: "same",
+      wallet: Keypair.generate().publicKey.toBase58(),
     };
 
     const d1 = await fw.validateTransaction(intent);

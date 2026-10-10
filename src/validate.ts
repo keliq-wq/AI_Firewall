@@ -116,8 +116,24 @@ export class Firewall {
 
   /** 不变量引擎:效果收集 → 协议无关不变量(I1/I2/I4/C1)→ 门判定 */
   private async invariantsGate(intent: TransactionIntent): Promise<GateDecision> {
-    const report = await new EffectsCollector(this.connection!).collect(intent.transaction!);
-    const violations = runInvariants(report, intent.wallet);
+    let report;
+    try {
+      report = await new EffectsCollector(this.connection!).collect(intent.transaction!);
+    } catch {
+      // 审计响应:ALT 未解析等异常不得使校验崩溃(MCP 工具必须给出判定而非报错)
+      return {
+        gate: "invariants",
+        verdict: "escalate",
+        concerns: [
+          {
+            id: "INV_C1",
+            severity: "medium",
+            message: "Invariant engine could not collect simulation facts (e.g. unresolved ALT) — verification skipped, human confirmation required",
+          },
+        ],
+      };
+    }
+    const violations = runInvariants(report, intent.wallet, this.policy.strictTokenOutflow);
     const concerns: Concern[] = violations.map((v) => ({
       id: `INV_${v.invariant}`,
       severity: v.severity,

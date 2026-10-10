@@ -6,7 +6,10 @@ const WALLET = Keypair.generate();
 const RECIPIENT = Keypair.generate().publicKey;
 
 function transferTx(from: PublicKey, to: PublicKey, lamports: number): Transaction {
-  return new Transaction().add(SystemProgram.transfer({ fromPubkey: from, toPubkey: to, lamports }));
+  const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: from, toPubkey: to, lamports }));
+  tx.feePayer = from;
+  tx.recentBlockhash = "1".repeat(32);
+  return tx;
 }
 
 describe("envelope 门 — 声明只作上限,解析事实交叉核对", () => {
@@ -64,15 +67,31 @@ describe("envelope 门 — 声明只作上限,解析事实交叉核对", () => {
     expect(r.concerns.some((c) => c.id === "RECIPIENT_MISMATCH" && c.severity === "medium")).toBe(true);
   });
 
-  it("不声明 wallet → 仅信息级提示,不影响判定", async () => {
+  it("不声明 wallet → 从 fee payer 推导,核对照常生效(封死诱饵绕过)", async () => {
     const fw = new Firewall();
+    // 未声明 wallet:声明 0.002 实转 0.04 → 照样拦截
+    const r = await fw.validateTransaction({
+      action: "transfer",
+      amount: 0.002,
+      recipient: RECIPIENT.toBase58(),
+      purpose: "Pay for compute",
+      transaction: transferTx(WALLET.publicKey, RECIPIENT, 0.04 * LAMPORTS_PER_SOL),
+    });
+    expect(r.shouldProceed).toBe(false);
+    expect(r.concerns.some((c) => c.id === "AMOUNT_EXCEEDS_ENVELOPE")).toBe(true);
+  });
+
+  it("声明 wallet 与 fee payer 不符 → WALLET_MISMATCH concern", async () => {
+    const fw = new Firewall();
+    const decoy = Keypair.generate().publicKey;
     const r = await fw.validateTransaction({
       action: "transfer",
       amount: 0.01,
       recipient: RECIPIENT.toBase58(),
       purpose: "Pay for compute",
+      wallet: decoy.toBase58(), // 诱饵
       transaction: transferTx(WALLET.publicKey, RECIPIENT, 0.01 * LAMPORTS_PER_SOL),
     });
-    expect(r.concerns.some((c) => c.id === "WALLET_UNDECLARED" && c.severity === "low")).toBe(true);
+    expect(r.concerns.some((c) => c.id === "WALLET_MISMATCH")).toBe(true);
   });
 });

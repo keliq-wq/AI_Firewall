@@ -92,20 +92,22 @@ describe("ALT 与 allowlist（探针 #1 回归 + V0 对照）", () => {
   });
 
   it("基线：V0 仅调用白名单内程序 → 放行", async () => {
-    const payer = Keypair.generate().publicKey;
+    const payer = Keypair.generate();
+    const to = Keypair.generate().publicKey;
     const msg = new TransactionMessage({
-      payerKey: payer,
+      payerKey: payer.publicKey,
       recentBlockhash: "11111111111111111111111111111111",
       instructions: [
-        SystemProgram.transfer({ fromPubkey: payer, toPubkey: Keypair.generate().publicKey, lamports: 1 }),
+        SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: to, lamports: 1 }),
       ],
     }).compileToV0Message();
     const fw = new Firewall({ mode: "strict", allowedPrograms: ALLOWLIST });
     const res = await fw.validateTransaction({
       action: "transfer",
-      amount: 0.1,
-      recipient: Keypair.generate().publicKey.toBase58(),
+      amount: 1e-9, // 实际转出 1 lamport
+      recipient: to.toBase58(), // 与交易一致(否则 RECIPIENT_MISMATCH)
       purpose: "probe",
+      wallet: payer.publicKey.toBase58(),
       transaction: new VersionedTransaction(msg),
     });
     expect(res.shouldProceed).toBe(true);

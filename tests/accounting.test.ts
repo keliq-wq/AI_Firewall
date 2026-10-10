@@ -14,18 +14,17 @@ function transferTx(to: Parameters<typeof Keypair.generate>[0] extends never ? n
 }
 
 describe("账本 — 三路绕过修复", () => {
-  it("绕过 1:不声明金额也会记账(推导金额兜底;无 wallet 时信封门不介入)", async () => {
+  it("绕过 1:未声明金额的转出不再静默放行——信封门从 fee payer 推导钱包并拒绝", async () => {
     const store = new AppendOnlySpendStore();
     const fw = new Firewall({ maxTransactionAmount: 10, dailyLimit: 10, store });
     const r = await fw.validateTransaction({
       action: "transfer",
-      // 不声明 amount、不声明 wallet → 信封门跳过 → 放行
+      // 不声明 amount、不声明 wallet → fee payer 推导出钱包 → UNDECLARED_OUTFLOW 拒绝
       purpose: "Pay",
       transaction: transferTx(RECIPIENT, 1 * LAMPORTS_PER_SOL),
     });
-    expect(r.shouldProceed).toBe(true);
-    const spent = store.sumSince("default", 0);
-    expect(spent).toBe(1); // 推导出 1 SOL 并记账
+    expect(r.shouldProceed).toBe(false);
+    expect(r.concerns.some((c) => c.id === "UNDECLARED_OUTFLOW")).toBe(true);
   });
 
   it("绕过 2:同收款方不同交易累积(不再 key 覆盖)", async () => {

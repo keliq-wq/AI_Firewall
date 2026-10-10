@@ -76,6 +76,8 @@ export interface FirewallPolicy {
   scope?: string;
   /** 第 2 层模拟执行：允许实际流出超出声明金额的容差（amountUnit 单位，覆盖手续费）。默认 0.05 */
   simulationFeeTolerance?: number;
+  /** 不变量 I1(代币净流出)严格模式:false=medium(escalate 人工确认,默认,兼容 swap 类代币业务);true=high(deny) */
+  strictTokenOutflow?: boolean;
   /** 滚动支出存储（默认内存实现；生产环境可替换为 Redis/DB） */
   store?: SpendStore;
   /** 时钟注入（测试用）。默认 Date.now */

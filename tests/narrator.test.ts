@@ -1,3 +1,4 @@
+import { Keypair } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 import { Firewall } from "../src/validate";
 
@@ -21,6 +22,7 @@ describe("风险叙述器（可解释安全）", () => {
       amount: 5,
       purpose: "Payment for NFT purchase",
       idempotencyKey: "n2",
+      wallet: Keypair.generate().publicKey.toBase58(),
     };
     const result = await fw.validateTransaction(intent);
     const text = await fw.explain(intent, result);

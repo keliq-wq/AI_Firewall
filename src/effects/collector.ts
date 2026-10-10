@@ -29,8 +29,10 @@ export interface TokenEffectDelta {
   pre: DecodedTokenAccount | null;
   post: DecodedTokenAccount | null;
   amountDelta: bigint;
-  /** Approve 即 delegate 出现或更换,或 delegatedAmount 增加 */
+  /** Approve = delegate 出现/更换,或 delegatedAmount 增加(有方向性,Revoke 不算) */
   approveDetected: boolean;
+  /** Revoke = delegate 撤销(Some→None),安全善后动作 */
+  delegateRevoked: boolean;
   delegateChanged: boolean;
   closeAuthorityChanged: boolean;
   frozenChanged: boolean;
@@ -170,9 +172,14 @@ export class EffectsCollector {
         if (!postDecoded) return;
         const preDelegate = preDecoded?.delegate?.toBase58() ?? null;
         const postDelegate = postDecoded.delegate?.toBase58() ?? null;
-        const delegateChanged = preDecoded != null && preDelegate !== postDelegate;
-        const approveDetected =
-          delegateChanged || (preDecoded != null && postDecoded.delegatedAmount > preDecoded.delegatedAmount);
+        const delegatedAmountDelta =
+          preDecoded != null ? postDecoded.delegatedAmount - preDecoded.delegatedAmount : 0n;
+        // 方向性(审计响应):Some→None 或额度减少 = Revoke(安全善后),不算 Approve
+        const delegateGranted = postDelegate != null && preDelegate !== postDelegate;
+        const delegatedAmountIncreased = delegatedAmountDelta > 0n;
+        const approveDetected = delegateGranted || delegatedAmountIncreased;
+        const delegateRevoked =
+          postDelegate == null && preDelegate != null;
         tokenDeltas.push({
           account: key.toBase58(),
           owner: postDecoded.owner.toBase58(),
@@ -181,7 +188,8 @@ export class EffectsCollector {
           post: postDecoded,
           amountDelta: postDecoded.amount - (preDecoded?.amount ?? 0n),
           approveDetected,
-          delegateChanged,
+          delegateRevoked,
+          delegateChanged: preDecoded != null && preDelegate !== postDelegate,
           closeAuthorityChanged:
             preDecoded != null &&
             (preDecoded.closeAuthority?.toBase58() ?? null) !== (postDecoded.closeAuthority?.toBase58() ?? null),

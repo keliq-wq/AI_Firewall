@@ -1,4 +1,5 @@
-import { Transaction, VersionedTransaction } from "@solana/web3.js";
+import { createHash } from "crypto";
+import { Transaction, TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
 import { ParsedTransaction } from "./parser";
 import { SpendStore } from "./types";
 import { TransactionIntent } from "./types";
@@ -14,34 +15,35 @@ import { TransactionIntent } from "./types";
  * 不同指纹 = 追加(累积)。24h 支出 = 窗口内全部条目之和(全局日限,不再按收款方分桶)。
  */
 
-/** djb2 字符串哈希(记账指纹用,非密码学用途) */
-function djb2(input: string): string {
-  let h = 5381;
-  for (let i = 0; i < input.length; i++) {
-    h = ((h << 5) + h + input.charCodeAt(i)) | 0;
+/** sha256 十六进制摘要(记账指纹,碰撞不可构造;审计响应:原 djb2 32 位碰撞可绕过 24h 限额) */
+function sha256(input: string): string {
+  return createHash("sha256").update(input).digest("hex");
+}
+
+/** 交易内容指纹(不含 blockhash/签名——同内容重试同指纹,内容变即指纹变) */
+function txContentString(tx: Transaction | VersionedTransaction): string {
+  if (tx instanceof VersionedTransaction) {
+    return Buffer.from(tx.message.serialize()).toString("base64");
   }
-  return (h >>> 0).toString(36);
+  // legacy:序列化指令内容(programId|data|keys),不依赖 blockhash/签名
+  const ixs = (tx.instructions as TransactionInstruction[])
+    .map((ix) => `${ix.programId.toBase58()}|${Buffer.from(ix.data).toString("hex")}|${ix.keys.map((k) => `${k.pubkey.toBase58()}:${k.isSigner ? "s" : "-"}${k.isWritable ? "w" : "-"}`).join(",")}`)
+    .join(";;");
+  return ixs;
 }
 
 /**
  * 交易内容指纹:
- * - 有原始交易 → 序列化消息字节的哈希(交易内容变即指纹变;重试同笔交易指纹不变)
+ * - 有原始交易 → sha256(交易内容字节,不含 blockhash)——legacy 无需序列化消息,签名前常态可用
  * - 无交易 → idempotencyKey ?? intent 字段拼接哈希(自述降级,不如交易指纹可靠)
  */
 export function transactionFingerprint(intent: TransactionIntent, parsed: ParsedTransaction): string {
   const tx = intent.transaction;
   if (tx) {
-    if (tx instanceof VersionedTransaction) {
-      return djb2(Buffer.from(tx.message.serialize()).toString("base64"));
-    }
-    try {
-      return djb2(Buffer.from(tx.serializeMessage()).toString("base64"));
-    } catch {
-      /* 缺 blockhash 无法序列化 → 降级 */
-    }
+    return `t:${sha256(txContentString(tx))}`;
   }
-  if (intent.idempotencyKey) return `k:${djb2(intent.idempotencyKey)}`;
-  return `i:${djb2(
+  if (intent.idempotencyKey) return `k:${sha256(intent.idempotencyKey)}`;
+  return `i:${sha256(
     [
       intent.action,
       intent.amount ?? "",

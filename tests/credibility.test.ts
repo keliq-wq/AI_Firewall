@@ -75,9 +75,11 @@ describe("credibility 门 — owner 变更检测（核心差异化能力）", ()
         programId: Keypair.generate().publicKey, // 非系统程序的 owner
       }),
     );
+    tx.feePayer = WALLET.publicKey;
     const r = await new Firewall().validateTransaction({
       action: "create_account",
       purpose: "test",
+      wallet: WALLET.publicKey.toBase58(),
       transaction: tx,
     });
     expect(r.concerns.some((c) => c.id === "ACCOUNT_CREATED")).toBe(true);
