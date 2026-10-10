@@ -1,5 +1,8 @@
 # 线上测试指南(Devnet 部署 + Layer 2/3 联调)
 
+> ⚠️ **本文是特定 Windows 机器的环境笔记**(网络被墙、solana CLI 坏、验证器特权坑)。
+> 标准机器(Linux/macOS)请读 `docs/GETTING-STARTED.md`。
+>
 > 2026-10-09 实测网络状态:GitHub 直连不稳(git push 走 `-c http.proxy=http://127.0.0.1:7890`);
 > `api.devnet.solana.com` ❌ 直连(走代理 7890 ✅);Alchemy demo devnet ✅ 直连(429 限流常见);
 > Helius ✅ 连通(需 key);npmmirror ✅。所有命令基于 Windows + Git Bash + 项目根目录。
