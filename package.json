@@ -4,6 +4,12 @@
   "description": "Layer-1 client-side transaction firewall for Solana AI Agents — intercepts and validates transaction intent before signing: owner-change detection, program allow/deny lists, amount & frequency limits, purpose requirements (CLAW four-gate protocol).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "files": [
     "dist"
   ],
