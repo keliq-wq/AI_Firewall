@@ -15,7 +15,8 @@
     "pitch": "tsx demo/pitch.ts",
     "mcp": "tsx src/mcp/server.ts",
     "mcp:prod": "node dist/mcp/server.js",
-    "dashboard": "tsx demo/dashboard/server.ts"
+    "dashboard": "tsx demo/dashboard/server.ts",
+    "prepare": "tsc"
   },
   "bin": {
     "firewall-mcp": "./dist/mcp/server.js"

@@ -29,6 +29,12 @@ npm test          # 32 unit tests
 npm run pitch     # offline 4-act attack demo (~3 min, no network)
 ```
 
+Or install directly from GitHub (works before the npm release):
+
+```bash
+npm install github:keliq-wq/AI_Firewall
+```
+
 ```ts
 import { Firewall } from "./src";
 
