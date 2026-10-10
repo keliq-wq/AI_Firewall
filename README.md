@@ -26,7 +26,6 @@ git clone https://github.com/keliq-wq/AI_Firewall.git
 cd AI_Firewall
 npm install
 npm test          # 32 unit tests
-npm run pitch     # offline 4-act attack demo (~3 min, no network)
 ```
 
 Or install directly from GitHub (works before the npm release):
@@ -108,7 +107,7 @@ Five one-click attack scenarios (owner phishing, over-limit, silent drain, black
 src/                 core library (gates, parser, simulator, narrator, MCP, agent-kit)
 programs/firewall/   Anchor program (Layer 3) + integration tests
 scripts/             deploy / attack scenarios / RPC proxy / confirm helpers
-demo/                pitch.ts (offline 4-act) · dashboard/ (web console)
+demo/                dashboard/ (web console)
 docs/                online-testing guide · demo narration guide
 ```
 
