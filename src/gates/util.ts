@@ -1,4 +1,4 @@
-import { Severity, Verdict } from "../types";
+import { EscalationTier, Severity, Verdict } from "../types";
 
 export const VERDICT_RANK: Record<Verdict, number> = { allow: 0, escalate: 1, deny: 2 };
 
@@ -30,4 +30,24 @@ export function verdictForSeverity(severity: Severity, mode: "strict" | "monitor
 
 export function dedupe(items: string[]): string[] {
   return [...new Set(items)];
+}
+
+const TIER_RANK: Record<EscalationTier, number> = { info: 0, notice: 1, confirm: 2, deny: 3 };
+
+/** 严重度 → 升级分级(low→info, medium→notice, high→confirm, critical→deny) */
+export function tierForSeverity(severity: Severity): EscalationTier {
+  switch (severity) {
+    case "critical":
+      return "deny";
+    case "high":
+      return "confirm";
+    case "medium":
+      return "notice";
+    default:
+      return "info";
+  }
+}
+
+export function worstTier(a: EscalationTier, b: EscalationTier): EscalationTier {
+  return TIER_RANK[a] >= TIER_RANK[b] ? a : b;
 }

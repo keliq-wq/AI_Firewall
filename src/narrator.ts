@@ -16,12 +16,13 @@ export class TemplateNarrator implements Narrator {
 
   async explain(intent: TransactionIntent, result: ValidationResult): Promise<string> {
     if (this.locale === "en") {
+      const tierLabel = { info: "INFO", notice: "NOTICE", confirm: "CONFIRM", deny: "DENY" }[result.tier ?? "info"];
       const verdict = result.shouldProceed
         ? "ALLOWED"
         : result.requiresConfirmation
           ? "BLOCKED - human confirmation required"
           : "BLOCKED";
-      const parts: string[] = [`【${verdict}】`];
+      const parts: string[] = [`【${verdict} · ${tierLabel}】`];
       if (intent.action) parts.push(`Action: ${intent.action}`);
       if (intent.amount != null) parts.push(`Amount: ${intent.amount}`);
       if (intent.recipient) parts.push(`Recipient: ${intent.recipient}`);
@@ -37,12 +38,13 @@ export class TemplateNarrator implements Narrator {
       return parts.join("\n");
     }
 
+    const tierLabel = { info: "记录", notice: "提示", confirm: "待确认", deny: "拒绝" }[result.tier ?? "info"];
     const verdict = result.shouldProceed
       ? "已放行"
       : result.requiresConfirmation
         ? "已拦截，等待人工确认"
         : "已拦截";
-    const parts: string[] = [`【${verdict}】`];
+    const parts: string[] = [`【${verdict} · ${tierLabel}】`];
     if (intent.action) parts.push(`操作：${intent.action}`);
     if (intent.amount != null) parts.push(`金额：${intent.amount}`);
     if (intent.recipient) parts.push(`收款方：${intent.recipient}`);

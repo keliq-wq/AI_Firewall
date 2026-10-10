@@ -82,11 +82,18 @@ export interface FirewallPolicy {
   timeProvider?: () => number;
 }
 
+/** 升级分级(对治告警疲劳):info=仅记录;notice=提示;confirm=需人工确认;deny=拒绝 */
+export type EscalationTier = "info" | "notice" | "confirm" | "deny";
+
 export interface ValidationResult {
   /** 是否放行执行 */
   shouldProceed: boolean;
   /** 是否需要人工确认（存在 escalate 且无 deny） */
   requiresConfirmation: boolean;
+  /** 升级分级:由最高严重度关切推导(low→info, medium→notice, high→confirm, critical→deny) */
+  tier: EscalationTier;
+  /** 交易内容指纹(有交易或幂等键时非空)——供 Agent 引用与审计追踪 */
+  fingerprint: string | null;
   /** 四门逐项判定 */
   decisions: GateDecision[];
   /** 全部风险发现（扁平化，按严重度降序） */

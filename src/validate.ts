@@ -5,14 +5,15 @@ import { envelopeGate } from "./gates/envelope";
 import { deriveSpendKey, limitsGate, parseAmount } from "./gates/limits";
 import { simulationGate } from "./gates/simulation";
 import { worthGate } from "./gates/worth";
-import { SEVERITY_RANK, verdictForSeverity, worstVerdict } from "./gates/util";
+import { SEVERITY_RANK, tierForSeverity, verdictForSeverity, worstTier, worstVerdict } from "./gates/util";
+import { transactionFingerprint } from "./accounting";
 import { EffectsCollector } from "./effects/collector";
 import { runInvariants } from "./invariants/engine";
 import { Narrator, TemplateNarrator } from "./narrator";
 import { ParsedTransaction, parseTransaction } from "./parser";
 import { ResolvedPolicy, resolvePolicy } from "./policy";
 import { TransactionSimulator } from "./rpc/simulator";
-import { Concern, FirewallPolicy, GateDecision, TransactionIntent, ValidationResult, Verdict } from "./types";
+import { Concern, EscalationTier, FirewallPolicy, GateDecision, TransactionIntent, ValidationResult, Verdict } from "./types";
 
 export interface FirewallOptions {
   /** RPC 连接：配置后启用第 2 层（simulation 门），对原始交易执行模拟验证 */
@@ -37,6 +38,10 @@ export class Firewall {
   private readonly simulator?: TransactionSimulator;
   private readonly connection?: Connection;
   private readonly narrator: Narrator;
+  /** 升级占比统计(验收指标:escalate 占比过高 = 告警疲劳) */
+  private validateCount = 0;
+  private escalateCount = 0;
+  private tierCounts: Record<string, number> = { info: 0, notice: 0, confirm: 0, deny: 0 };
 
   constructor(policy: Partial<FirewallPolicy> = {}, options: FirewallOptions = {}) {
     this.policy = resolvePolicy(policy);
@@ -78,12 +83,34 @@ export class Firewall {
       .flatMap((d) => d.concerns)
       .sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity]);
 
+    // 升级分级:由最高严重度关切推导;总体拒绝时一律 deny
+    let tier: EscalationTier = "info";
+    for (const c of concerns) tier = worstTier(tier, tierForSeverity(c.severity));
+    if (overall === "deny") tier = "deny";
+
+    // 升级占比统计
+    this.validateCount++;
+    this.tierCounts[tier] = (this.tierCounts[tier] ?? 0) + 1;
+    if (overall === "escalate") this.escalateCount++;
+
     return {
       shouldProceed: overall === "allow",
       requiresConfirmation: overall === "escalate",
+      tier,
+      fingerprint: intent.transaction || intent.idempotencyKey ? transactionFingerprint(intent, parsed) : null,
       decisions,
       concerns,
       summary: buildSummary(decisions, overall),
+    };
+  }
+
+  /** 升级占比统计(验收指标):escalate 占比 = 需人工确认次数 / 校验总次数 */
+  get stats(): { validations: number; escalations: number; escalationRate: number; tiers: Record<string, number> } {
+    return {
+      validations: this.validateCount,
+      escalations: this.escalateCount,
+      escalationRate: this.validateCount === 0 ? 0 : this.escalateCount / this.validateCount,
+      tiers: { ...this.tierCounts },
     };
   }
 

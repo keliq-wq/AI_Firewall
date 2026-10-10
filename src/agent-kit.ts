@@ -40,6 +40,7 @@ export function FirewallPlugin(policyOptions: Partial<FirewallPolicy> = {}): Fir
     agent.methods.validateTransaction = (intent: unknown): Promise<ValidationResult> =>
       firewall.validateTransaction(intent as TransactionIntent);
     agent.methods.getFirewallPolicy = () => firewall.policy;
+    agent.methods.getFirewallStats = () => firewall.stats;
     return agent;
   };
 }
