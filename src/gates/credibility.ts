@@ -40,8 +40,18 @@ export function credibilityGate(
     }
   }
 
-  // owner 变更检测（核心）：识别 owner 被重定向至黑名单/白名单/未验证程序
+  // owner 变更检测（核心）：区分「本笔新建账户」（正常业务）与「既有账户 owner 改向」（钓鱼攻击面）
   for (const change of parsed.ownerChanges) {
+    const isCreation = change.via === "create_account" || change.via === "create_account_with_seed";
+    if (isCreation) {
+      concerns.push({
+        id: "ACCOUNT_CREATED",
+        severity: "low",
+        message: `Account ${change.account} created and owned by ${change.newOwner} (${change.via}) — normal account creation`,
+        details: { account: change.account, newOwner: change.newOwner, via: change.via },
+      });
+      continue;
+    }
     if (policy.blockedPrograms.includes(change.newOwner)) {
       concerns.push({
         id: "OWNER_CHANGE_BLOCKED",
@@ -62,6 +72,39 @@ export function credibilityGate(
         severity: "high",
         message: `Account ${change.account} owner would be reassigned to unverified program ${change.newOwner} (${change.via}) — classic owner-phishing pattern unless intentional`,
         details: { account: change.account, newOwner: change.newOwner, via: change.via },
+      });
+    }
+  }
+
+  // 代币权限操作：授权/权限转移/关闭是资金控制权变更，离线即可识别（任何协议 CPI 转发的顶层也命中）
+  for (const op of parsed.tokenAuthorityOps) {
+    if (op.kind === "approve") {
+      concerns.push({
+        id: "TOKEN_APPROVE",
+        severity: "high",
+        message: `Token account ${op.account} approves ${op.counterparty ?? "?"} for ${op.amount ?? "?"} raw units — delegated authority can drain the balance`,
+        details: { account: op.account, delegate: op.counterparty, amount: op.amount },
+      });
+    } else if (op.kind === "set_authority") {
+      concerns.push({
+        id: "TOKEN_SET_AUTHORITY",
+        severity: "high",
+        message: `Token authority on ${op.account} is being changed (type ${op.authorityType ?? "?"}) — verify it is intentional`,
+        details: { account: op.account, authorityType: op.authorityType },
+      });
+    } else if (op.kind === "close_account") {
+      concerns.push({
+        id: "TOKEN_CLOSE_ACCOUNT",
+        severity: "high",
+        message: `Token account ${op.account} is being closed, funds swept to ${op.counterparty ?? "?"} — verify balance is zero or intended`,
+        details: { account: op.account, destination: op.counterparty },
+      });
+    } else if (op.kind === "burn") {
+      concerns.push({
+        id: "TOKEN_BURN",
+        severity: "medium",
+        message: `Tokens are being burned from ${op.account}`,
+        details: { account: op.account },
       });
     }
   }

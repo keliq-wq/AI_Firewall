@@ -12,8 +12,8 @@ programs/*/target/
 
 # 审计/调试探针与临时目录（探针保留在盘上，Phase 2 将反转成验收测试后单独入库）
 .tmp-*/
-*.tmp.ts
-*.tmp.test.ts
+tmp_*/
+*.tmp.*
 
 # 持久化测试密钥（testnet 测试钱包，不入库）
 scripts/keys/

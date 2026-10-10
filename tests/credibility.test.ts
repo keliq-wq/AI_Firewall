@@ -65,7 +65,7 @@ describe("credibility 门 — owner 变更检测（核心差异化能力）", ()
     expect(r.concerns.some((c) => c.id === "OWNER_CHANGE_BLOCKED")).toBe(true);
   });
 
-  it("createAccount 指定非系统 owner → OWNER_CHANGE", async () => {
+  it("createAccount(含非系统 owner)为正常建户,不再误报为 owner 变更", async () => {
     const tx = new Transaction().add(
       SystemProgram.createAccount({
         fromPubkey: WALLET.publicKey,
@@ -80,8 +80,9 @@ describe("credibility 门 — owner 变更检测（核心差异化能力）", ()
       purpose: "test",
       transaction: tx,
     });
-    expect(r.concerns.some((c) => c.id === "OWNER_CHANGE")).toBe(true);
-    expect(r.shouldProceed).toBe(false);
+    expect(r.concerns.some((c) => c.id === "ACCOUNT_CREATED")).toBe(true);
+    expect(r.concerns.some((c) => c.id === "OWNER_CHANGE")).toBe(false);
+    expect(r.shouldProceed).toBe(true);
   });
 
   it("白名单外的程序调用 → PROGRAM_NOT_ALLOWED", async () => {

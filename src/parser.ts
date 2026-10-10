@@ -35,8 +35,21 @@ export interface NativeTransfer {
 export interface TokenTransfer {
   source: string;
   dest: string;
+  /** Transfer(3) 指令不含 mint 账户，此字段为空串；TransferChecked(12) 才有 */
   mint: string;
   amount: string;
+}
+
+/** 代币权限/危险操作（授权即失去资金控制权，离线即可识别，一次实现全协议受益） */
+export interface TokenAuthorityOp {
+  kind: "approve" | "revoke" | "set_authority" | "close_account" | "burn";
+  account: string;
+  /** approve 的受托方 / close_account 的退款收款方 */
+  counterparty?: string;
+  /** approve 的授权金额(raw) */
+  amount?: string;
+  /** set_authority 的权限类型(1=mint,2=freeze,3=close,4=transfer fee,5=permanent delegate…) */
+  authorityType?: number;
 }
 
 export interface ParsedTransaction {
@@ -44,6 +57,7 @@ export interface ParsedTransaction {
   accountKeys: string[];
   nativeTransfers: NativeTransfer[];
   tokenTransfers: TokenTransfer[];
+  tokenAuthorityOps: TokenAuthorityOp[];
   ownerChanges: OwnerChange[];
   /** 存在无法离线解析的地址查找表（ALT） */
   unresolvedLookups: boolean;
@@ -54,6 +68,7 @@ export const EMPTY_PARSED: ParsedTransaction = {
   accountKeys: [],
   nativeTransfers: [],
   tokenTransfers: [],
+  tokenAuthorityOps: [],
   ownerChanges: [],
   unresolvedLookups: false,
 };
@@ -76,6 +91,12 @@ export function classifyActions(parsed: ParsedTransaction): string[] {
   ) {
     actions.push("create_account");
   }
+  // 代币权限操作：授权/关闭/权限转移是资金控制权变更，属敏感操作
+  const tokenOps = parsed.tokenAuthorityOps;
+  if (tokenOps.some((o) => o.kind === "approve")) actions.push("token_approve");
+  if (tokenOps.some((o) => o.kind === "set_authority")) actions.push("set_authority");
+  if (tokenOps.some((o) => o.kind === "close_account")) actions.push("close_account");
+  if (tokenOps.some((o) => o.kind === "burn")) actions.push("burn");
   return actions;
 }
 
@@ -123,6 +144,7 @@ function freshParsed(): ParsedTransaction {
     accountKeys: [],
     nativeTransfers: [],
     tokenTransfers: [],
+    tokenAuthorityOps: [],
     ownerChanges: [],
     unresolvedLookups: false,
   };
@@ -211,31 +233,88 @@ function decodeInstruction(
     /* 非该指令类型 */
   }
 
-  // Token 程序：转账（raw amount，无 mint decimals 无法折算，仅记录）
+  // Token 程序：转账 + 权限/危险操作
   if (programId === TOKEN_PROGRAM_ID || programId === TOKEN_2022_PROGRAM_ID) {
-    const transfer = decodeTokenTransfer(data, keys);
-    if (transfer) {
-      out.tokenTransfers.push(transfer);
-      return;
-    }
+    decodeTokenInstruction(out, data, keys);
   }
 }
 
-/** 手动解码 Token 转账：首字节指令类型（3=Transfer, 12=TransferChecked），其后为 u64 LE 金额；keys[0]=source, keys[1]=mint, keys[2]=dest */
-function decodeTokenTransfer(data: Buffer, keys: AccountMeta[]): TokenTransfer | null {
-  if (data.length < 9) return null;
+/**
+ * 手动解码 Token 指令（对照 spl-token instruction 布局）：
+ *   Transfer(3):         keys=[source(w), destination(w), authority(s)]      —— mint 不在指令中
+ *   TransferChecked(12): keys=[source(w), mint(r), destination(w), authority(s)]
+ *   Approve(4):          keys=[source(w), delegate(r), owner(s)]
+ *   Revoke(5):           keys=[source(w), owner(s)]
+ *   SetAuthority(6):     keys=[account(w), authority(s)] (+新 authority 在 data)
+ *   Burn(8):             keys=[account(w), mint(r), owner(s)]
+ *   CloseAccount(9):     keys=[account(w), destination(w), owner(s)]
+ */
+function decodeTokenInstruction(out: ParsedTransaction, data: Buffer, keys: AccountMeta[]): void {
+  if (data.length < 1) return;
   const type = data[0];
-  if (type !== 3 && type !== 12) return null;
-  const source = keys[0]?.pubkey;
-  const mint = keys[1]?.pubkey;
-  const dest = keys[2]?.pubkey;
-  if (!source || !mint || !dest) return null;
-  return {
-    source: source.toBase58(),
-    dest: dest.toBase58(),
-    mint: mint.toBase58(),
-    amount: data.readBigUInt64LE(1).toString(),
-  };
+  const keyAt = (i: number) => keys[i]?.pubkey?.toBase58();
+
+  if (type === 3 && data.length >= 9) {
+    const source = keyAt(0);
+    const dest = keyAt(1);
+    if (!source || !dest) return;
+    out.tokenTransfers.push({
+      source,
+      dest,
+      mint: "", // Transfer 指令无 mint 账户
+      amount: data.readBigUInt64LE(1).toString(),
+    });
+    return;
+  }
+  if (type === 12 && data.length >= 10) {
+    const source = keyAt(0);
+    const mint = keyAt(1);
+    const dest = keyAt(2);
+    if (!source || !mint || !dest) return;
+    out.tokenTransfers.push({
+      source,
+      dest,
+      mint,
+      amount: data.readBigUInt64LE(1).toString(),
+    });
+    return;
+  }
+  if (type === 4 && data.length >= 9) {
+    const account = keyAt(0);
+    const delegate = keyAt(1);
+    if (!account) return;
+    out.tokenAuthorityOps.push({
+      kind: "approve",
+      account,
+      counterparty: delegate,
+      amount: data.readBigUInt64LE(1).toString(),
+    });
+    return;
+  }
+  if (type === 5) {
+    const account = keyAt(0);
+    if (!account) return;
+    out.tokenAuthorityOps.push({ kind: "revoke", account });
+    return;
+  }
+  if (type === 6 && data.length >= 2) {
+    const account = keyAt(0);
+    if (!account) return;
+    out.tokenAuthorityOps.push({ kind: "set_authority", account, authorityType: data[1] });
+    return;
+  }
+  if (type === 9) {
+    const account = keyAt(0);
+    if (!account) return;
+    out.tokenAuthorityOps.push({ kind: "close_account", account, counterparty: keyAt(1) });
+    return;
+  }
+  if (type === 8) {
+    const account = keyAt(0);
+    if (!account) return;
+    out.tokenAuthorityOps.push({ kind: "burn", account });
+    return;
+  }
 }
 
 function dedupeParsed(out: ParsedTransaction): ParsedTransaction {
