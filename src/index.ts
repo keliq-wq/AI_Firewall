@@ -19,5 +19,7 @@ export { limitsGate, parseAmount } from "./gates/limits";
 export { avoidanceGate } from "./gates/avoidance";
 export { worthGate } from "./gates/worth";
 export { simulationGate } from "./gates/simulation";
-export { TransactionSimulator, SimulationReport, SimulatedEffect } from "./rpc/simulator";
+export { TransactionSimulator, SimulationReport, SimulatedEffect, accountKeysOf } from "./rpc/simulator";
+export { EffectsCollector, EffectReport, TokenEffectDelta } from "./effects/collector";
+export { runInvariants, InvariantViolation } from "./invariants/engine";
 export { Narrator, TemplateNarrator, OpenAICompatibleNarrator } from "./narrator";

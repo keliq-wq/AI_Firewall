@@ -1,16 +1,18 @@
-import { Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Connection, LAMPORTS_PER_SOL, VersionedTransaction } from "@solana/web3.js";
 import { avoidanceGate } from "./gates/avoidance";
 import { credibilityGate } from "./gates/credibility";
 import { envelopeGate } from "./gates/envelope";
 import { deriveSpendKey, limitsGate, parseAmount } from "./gates/limits";
 import { simulationGate } from "./gates/simulation";
 import { worthGate } from "./gates/worth";
-import { SEVERITY_RANK, worstVerdict } from "./gates/util";
+import { SEVERITY_RANK, verdictForSeverity, worstVerdict } from "./gates/util";
+import { EffectsCollector } from "./effects/collector";
+import { runInvariants } from "./invariants/engine";
 import { Narrator, TemplateNarrator } from "./narrator";
 import { ParsedTransaction, parseTransaction } from "./parser";
 import { ResolvedPolicy, resolvePolicy } from "./policy";
 import { TransactionSimulator } from "./rpc/simulator";
-import { FirewallPolicy, GateDecision, TransactionIntent, ValidationResult, Verdict } from "./types";
+import { Concern, FirewallPolicy, GateDecision, TransactionIntent, ValidationResult, Verdict } from "./types";
 
 export interface FirewallOptions {
   /** RPC 连接：配置后启用第 2 层（simulation 门），对原始交易执行模拟验证 */
@@ -33,11 +35,13 @@ export interface FirewallOptions {
 export class Firewall {
   readonly policy: ResolvedPolicy;
   private readonly simulator?: TransactionSimulator;
+  private readonly connection?: Connection;
   private readonly narrator: Narrator;
 
   constructor(policy: Partial<FirewallPolicy> = {}, options: FirewallOptions = {}) {
     this.policy = resolvePolicy(policy);
     this.simulator = options.connection ? new TransactionSimulator(options.connection) : undefined;
+    this.connection = options.connection;
     this.narrator = options.narrator ?? new TemplateNarrator();
   }
 
@@ -55,6 +59,12 @@ export class Firewall {
     // 第 2 层：配置了 RPC 连接且传入原始交易时，追加模拟执行验证
     if (this.simulator && intent.transaction) {
       decisions.push(await simulationGate(intent, intent.transaction, this.simulator, this.policy));
+
+      // 不变量引擎(V0 专属):效果收集器提取代币余额/权限突变事实,
+      // 协议无关不变量 I1/I2/I4/C1 判定。legacy 无 CPI 可见性,保持旧路径。
+      if (this.connection && intent.transaction instanceof VersionedTransaction) {
+        decisions.push(await this.invariantsGate(intent));
+      }
     }
 
     let overall: Verdict = "allow";
@@ -75,6 +85,21 @@ export class Firewall {
       concerns,
       summary: buildSummary(decisions, overall),
     };
+  }
+
+  /** 不变量引擎:效果收集 → 协议无关不变量(I1/I2/I4/C1)→ 门判定 */
+  private async invariantsGate(intent: TransactionIntent): Promise<GateDecision> {
+    const report = await new EffectsCollector(this.connection!).collect(intent.transaction!);
+    const violations = runInvariants(report, intent.wallet);
+    const concerns: Concern[] = violations.map((v) => ({
+      id: `INV_${v.invariant}`,
+      severity: v.severity,
+      message: v.message,
+      details: v.details,
+    }));
+    let verdict: Verdict = "allow";
+    for (const c of concerns) verdict = worstVerdict(verdict, verdictForSeverity(c.severity, this.policy.mode));
+    return { gate: "invariants", verdict, concerns };
   }
 
   /** 生成面向人类/Agent 的自然语言风险叙述 */

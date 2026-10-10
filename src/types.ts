@@ -12,7 +12,7 @@ export type Verdict = "allow" | "deny" | "escalate";
  * 第 2 层（配置 RPC 连接后）追加：
  * - simulation  模拟执行：simulateTransaction 揭示 CPI 层 owner 变更与钱包净流出比对
  */
-export type GateName = "credibility" | "limits" | "envelope" | "avoidance" | "worth" | "simulation";
+export type GateName = "credibility" | "limits" | "envelope" | "avoidance" | "worth" | "simulation" | "invariants";
 
 export type Severity = "low" | "medium" | "high" | "critical";
 

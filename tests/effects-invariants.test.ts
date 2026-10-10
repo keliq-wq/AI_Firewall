@@ -2,6 +2,7 @@ import { Connection, Keypair, PublicKey, SystemProgram, Transaction, VersionedTr
 import { describe, expect, it } from "vitest";
 import { EffectsCollector, EffectReport } from "../src/effects/collector";
 import { runInvariants } from "../src/invariants/engine";
+import { Firewall } from "../src";
 
 const TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const WALLET = Keypair.generate();
@@ -184,6 +185,47 @@ describe("EffectsCollector — 分块模拟与事实提取", () => {
     const report = await collector.collect(vtx);
     // 响应条数不足 → truncated(或 missing-pre)
     expect(report.completeness).not.toBe("complete");
+  });
+});
+
+describe("Firewall 管线接入 — V0 不变量全链路", () => {
+  it("V0 交易 + Approve 突变 → INV_I2 deny", { timeout: 30000 }, async () => {
+    const ata = Keypair.generate().publicKey;
+    const attacker = Keypair.generate().publicKey;
+    const fake = new FakeRpc();
+    const pre = tokenAccountState({ amount: 100n });
+    const post = tokenAccountState({ amount: 100n, delegate: attacker });
+    fake.setState(ata, { lamports: 2039280, owner: TOKEN_PROGRAM.toBase58(), data: pre, executable: false });
+    fake.setState(WALLET.publicKey, { lamports: 1000000, owner: SystemProgram.programId.toBase58(), data: Buffer.alloc(0), executable: false });
+    fake.setState(TOKEN_PROGRAM, { lamports: 1, owner: "BPFLoaderUpgradeab1e11111111111111111111111", data: Buffer.alloc(0), executable: true });
+    fake.setPostState(ata, { lamports: 2039280, owner: TOKEN_PROGRAM.toBase58(), data: post, executable: false });
+
+    const vtx = new VersionedTransaction(
+      new (require("@solana/web3.js").TransactionMessage)({
+        payerKey: WALLET.publicKey,
+        recentBlockhash: "1".repeat(32),
+        instructions: [
+          new (require("@solana/web3.js").TransactionInstruction)({
+            programId: TOKEN_PROGRAM,
+            keys: [
+              { pubkey: ata, isSigner: false, isWritable: true },
+              { pubkey: WALLET.publicKey, isSigner: true, isWritable: false },
+            ],
+            data: Buffer.alloc(0),
+          }),
+        ],
+      }).compileToV0Message(),
+    );
+
+    const fw = new Firewall({ mode: "strict" }, { connection: fake as unknown as Connection });
+    const r = await fw.validateTransaction({
+      action: "custom",
+      purpose: "claim airdrop",
+      wallet: WALLET.publicKey.toBase58(),
+      transaction: vtx,
+    });
+    expect(r.shouldProceed).toBe(false);
+    expect(r.concerns.some((c) => c.id === "INV_I2")).toBe(true);
   });
 });
 

@@ -68,27 +68,9 @@ export class EffectsCollector {
     let truncated = false;
     let innerSensitiveHits: { tag: number; program: string }[] = [];
 
-    for (const chunk of chunks) {
-      // V0:分块 addresses 配置;legacy:旧签名 includeAccounts(已知技术债:无 CPI 可见性,上层须 fail-closed 处理)
-      const resp =
-        tx instanceof VersionedTransaction
-          ? await this.connection.simulateTransaction(tx, {
-              sigVerify: false,
-              replaceRecentBlockhash: true,
-              innerInstructions: true,
-              accounts: { encoding: "base64", addresses: chunk },
-            })
-          : await this.connection.simulateTransaction(tx, undefined, true);
-      const value = resp.value;
-      if (simErr == null && value.err) {
-        simErr = typeof value.err === "string" ? value.err : JSON.stringify(value.err);
-      }
-      const base = chunks.indexOf(chunk) * CHUNK;
-      const got = value.accounts ?? [];
-      if (got.length < chunk.length) truncated = true; // 对账:少一条都要 fail-closed
-      got.forEach((a, i) => {
-        if (base + i < merged.length) merged[base + i] = a ?? null;
-      });
+    const scanInner = (value: {
+      innerInstructions?: { index: number; instructions: unknown[] }[] | null;
+    }) => {
       // 内层敏感指令扫描(I4):CPI 转发的 Approve/SetAuthority/CloseAccount 同样暴露
       for (const group of value.innerInstructions ?? []) {
         for (const inner of group.instructions) {
@@ -111,6 +93,43 @@ export class EffectsCollector {
           }
         }
       }
+    };
+
+    if (tx instanceof VersionedTransaction) {
+      // V0:分块 addresses 配置(契约上限),逐块对账
+      for (const chunk of chunks) {
+        const resp = await this.connection.simulateTransaction(tx, {
+          sigVerify: false,
+          replaceRecentBlockhash: true,
+          innerInstructions: true,
+          accounts: { encoding: "base64", addresses: chunk },
+        });
+        const value = resp.value;
+        if (simErr == null && value.err) {
+          simErr = typeof value.err === "string" ? value.err : JSON.stringify(value.err);
+        }
+        const base = chunks.indexOf(chunk) * CHUNK;
+        const got = value.accounts ?? [];
+        if (got.length < chunk.length) truncated = true; // 对账:少一条都要 fail-closed
+        got.forEach((a, i) => {
+          if (base + i < merged.length) merged[base + i] = a ?? null;
+        });
+        scanInner(value);
+      }
+    } else {
+      // legacy:旧签名 includeAccounts,单次调用(无 addresses 过滤;无 CPI 可见性,
+      // 完整性判定只看 accounts 是否为 null)
+      const resp = await this.connection.simulateTransaction(tx, undefined, true);
+      const value = resp.value;
+      if (simErr == null && value.err) {
+        simErr = typeof value.err === "string" ? value.err : JSON.stringify(value.err);
+      }
+      const got = value.accounts ?? [];
+      if (got == null) truncated = true;
+      got.forEach((a, i) => {
+        if (i < merged.length) merged[i] = a ?? null;
+      });
+      scanInner(value as { innerInstructions?: { index: number; instructions: unknown[] }[] | null });
     }
 
     // ── 前态(多节点滞后重试)──
