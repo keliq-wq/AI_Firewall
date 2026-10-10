@@ -13,7 +13,7 @@ import { expect } from "chai";
 import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import { confirmHttp, getLatestBlockhashRetry, sendRawTransactionRetry } from "../../../scripts/tx-confirm";
-import idl from "../target/idl/firewall.json";
+import idl from "../idl/firewall.json";
 
 // 链上错误码（errors.rs 顺序 + anchor 6000 偏移）
 const CODE = {

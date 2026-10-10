@@ -25,7 +25,8 @@
 git clone https://github.com/keliq-wq/AI_Firewall.git
 cd AI_Firewall
 npm install
-npm test          # 32 unit tests
+npm test          # 80 tests(20 文件)
+npm run dashboard # 可视化面板,零构建(IDL 已入仓):http://127.0.0.1:3000
 ```
 
 Or install directly from GitHub (works before the npm release):

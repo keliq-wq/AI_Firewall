@@ -21,7 +21,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { homedir } from "os";
 import { join, dirname } from "path";
 import { confirmHttp, getLatestBlockhashRetry, sendRawTransactionRetry } from "./tx-confirm";
-import idl from "../programs/firewall/target/idl/firewall.json";
+import idl from "../programs/firewall/idl/firewall.json";
 
 const RPC_URL = process.argv[2] ?? "http://127.0.0.1:8898";
 const CLUSTER = process.env.CLUSTER ?? "testnet";

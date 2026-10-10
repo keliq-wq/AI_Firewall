@@ -123,12 +123,15 @@ npx tsx scripts/devnet-smoke.ts https://api.devnet.solana.com
 
 每步输出 explorer.solana.com 交易链接,可直观验证链上拒绝。
 
-## 6. 可视化面板(可选)
+## 6. 可视化面板(可选,零配置)
 
 ```bash
-RPC_URL=https://api.devnet.solana.com npm run dashboard
+npm run dashboard
 # 打开 http://127.0.0.1:3000 —— 五剧本点击即测,中英切换
 ```
+
+默认连接 devnet 公共 RPC,演示钱包自动经水龙头注资 0.5 SOL(devnet 限流时剧本 B/C
+的模拟会显示余额不足,属预期)。自定义:`RPC_URL=<rpc> WALLET_KEYPAIR=<已注资钱包> npm run dashboard`。
 
 ## 常见问题
 

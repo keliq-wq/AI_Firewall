@@ -96,7 +96,7 @@ RPC_URL=http://127.0.0.1:8898 WALLET_KEYPAIR=~/.config/solana/id.json \
 ## 4. 构建与部署速查
 
 - 编译:`cd programs/firewall && cargo build-sbf [--arch v2|v3]` → 输出在**根** `target/deploy/firewall.so`(cargo-build-sbf 4.4 默认 v3、platform-tools v1.57)
-- IDL:`~/.avm/bin/anchor-1.0.0 idl build > programs/firewall/target/idl/firewall.json`(从根目录)
+- IDL:`~/.avm/bin/anchor-1.0.0 idl build > programs/firewall/target/idl/firewall.json`(从根目录),改完**同步入仓副本**(面板/测试/脚本读的是它):`cp programs/firewall/target/idl/firewall.json programs/firewall/idl/firewall.json`
 - 部署:`npx tsx scripts/deploy-program.ts <RPC_URL> [payerKeypair]`——bincode fixint 编码(tag u32 + Vec len u64)、Buffer 元数据 37、ProgramData 45、programdata=PDA([program],loader)、36 字节程序账户预创建、残留自动清理,全部已踩坑验证
 - 测试钱包注资:一律 `FAUCET_KEYPAIR=<faucet 或已注资钱包> ` 前缀(脚本自动转账)
 - 本机 CLI:优先用 `D:\agave\solana-release\bin`(4.3 修好了 reqwest);1.18 的 CLI 只适合远程 URL

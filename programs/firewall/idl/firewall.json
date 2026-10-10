@@ -1,0 +1,699 @@
+{
+  "address": "5ZtXDT2Qs1esK3UR61une1fqRkV8KQ7tssMqWXNUFXX",
+  "metadata": {
+    "name": "firewall",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "On-chain policy enforcement vault for AI agents (Layer 3 of the AI Agent transaction firewall)"
+  },
+  "docs": [
+    "AI Agent 交易防火墙 — 第 3 层：链上策略强制执行金库",
+    "",
+    "安全边界在最底层的 Solana 程序：Agent 的签名密钥对金库资金零权限，",
+    "所有支出必须通过本程序的链上检查（身份 → 单笔限额 → 白名单/收款方 → 24h 滚动窗口）。",
+    "即使第 1/2 层客户端策略被完全绕过（如 Agent 私钥泄露后被直接调用），超限支出依然无法发生。"
+  ],
+  "instructions": [
+    {
+      "name": "deposit",
+      "docs": [
+        "入金（仅登记的 Agent 钱包）"
+      ],
+      "discriminator": [
+        242,
+        35,
+        198,
+        137,
+        82,
+        225,
+        242,
+        182
+      ],
+      "accounts": [
+        {
+          "name": "depositor",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "policy",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.authority",
+                "account": "PolicyConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.authority",
+                "account": "PolicyConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "execute",
+      "docs": [
+        "协议调用：金库向白名单协议付款（链上强制 + 目标程序白名单）"
+      ],
+      "discriminator": [
+        130,
+        221,
+        242,
+        154,
+        13,
+        193,
+        189,
+        29
+      ],
+      "accounts": [
+        {
+          "name": "agent",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "policy",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.authority",
+                "account": "PolicyConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  45,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.authority",
+                "account": "PolicyConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.authority",
+                "account": "PolicyConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_program"
+        },
+        {
+          "name": "destination",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ]
+    },
+    {
+      "name": "initialize",
+      "docs": [
+        "初始化策略：登记 Agent 钱包、限额与协议白名单，创建金库与记账账户"
+      ],
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  45,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "agent",
+          "type": "pubkey"
+        },
+        {
+          "name": "max_per_transaction",
+          "type": "u64"
+        },
+        {
+          "name": "daily_limit",
+          "type": "u64"
+        },
+        {
+          "name": "allowed_programs",
+          "type": {
+            "vec": "pubkey"
+          }
+        }
+      ]
+    },
+    {
+      "name": "update_policy",
+      "docs": [
+        "更新策略（仅 authority，字段可选）"
+      ],
+      "discriminator": [
+        212,
+        245,
+        246,
+        7,
+        163,
+        151,
+        18,
+        57
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "agent",
+          "type": {
+            "option": "pubkey"
+          }
+        },
+        {
+          "name": "max_per_transaction",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "daily_limit",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "allowed_programs",
+          "type": {
+            "option": {
+              "vec": "pubkey"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "withdraw",
+      "docs": [
+        "提现：金库唯一原生支出路径（链上强制全部策略检查）"
+      ],
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "agent",
+          "docs": [
+            "支出授权主体：必须是策略中登记的 Agent 钱包"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "policy",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.authority",
+                "account": "PolicyConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  45,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.authority",
+                "account": "PolicyConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.authority",
+                "account": "PolicyConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "destination",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "PolicyConfig",
+      "discriminator": [
+        219,
+        7,
+        79,
+        84,
+        175,
+        51,
+        148,
+        146
+      ]
+    },
+    {
+      "name": "VaultState",
+      "discriminator": [
+        228,
+        196,
+        82,
+        165,
+        98,
+        210,
+        235,
+        152
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "AmountExceeded",
+      "msg": "Amount exceeds per-transaction cap"
+    },
+    {
+      "code": 6001,
+      "name": "ZeroAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6002,
+      "name": "DailyLimitExceeded",
+      "msg": "24h rolling spend limit would be exceeded"
+    },
+    {
+      "code": 6003,
+      "name": "ProgramNotAllowed",
+      "msg": "Target program is not in the policy allowlist"
+    },
+    {
+      "code": 6004,
+      "name": "UnauthorizedAgent",
+      "msg": "Only the registered agent may initiate spending"
+    },
+    {
+      "code": 6005,
+      "name": "UnauthorizedAuthority",
+      "msg": "Only the authority may update the policy"
+    },
+    {
+      "code": 6006,
+      "name": "UnauthorizedDepositor",
+      "msg": "Only the registered agent may deposit"
+    },
+    {
+      "code": 6007,
+      "name": "DestinationNotWallet",
+      "msg": "Withdrawal destination must be a system-owned wallet"
+    },
+    {
+      "code": 6008,
+      "name": "ProgramNotExecutable",
+      "msg": "Target program account must be executable"
+    },
+    {
+      "code": 6009,
+      "name": "ProgramInvokeFailed",
+      "msg": "Target program invocation failed"
+    },
+    {
+      "code": 6010,
+      "name": "ArithmeticOverflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6011,
+      "name": "InvariantI1Violated",
+      "msg": "Invariant I1 violated: vault net outflow exceeds declared amount"
+    },
+    {
+      "code": 6012,
+      "name": "InvariantI2Violated",
+      "msg": "Invariant I2 violated: token permission mutated by target program"
+    }
+  ],
+  "types": [
+    {
+      "name": "PolicyConfig",
+      "docs": [
+        "策略配置：由 authority 初始化，定义 Agent 支出边界"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "可更新策略的管理员"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "docs": [
+              "受约束的 AI Agent 钱包——唯一的支出发起主体"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "max_per_transaction",
+            "docs": [
+              "单笔支出上限（lamports）"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "daily_limit",
+            "docs": [
+              "24h 滚动支出上限（lamports）"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "allowed_programs",
+            "docs": [
+              "协议白名单：execute 指令只允许调用此列表中的程序"
+            ],
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultState",
+      "docs": [
+        "金库状态：滚动支出窗口记账"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "window_start",
+            "docs": [
+              "当前 24h 窗口起点（unix 秒）"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "spent_in_window",
+            "docs": [
+              "当前窗口内累计支出"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}

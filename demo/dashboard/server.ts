@@ -25,10 +25,10 @@ import {
 import { Firewall, TransactionIntent, TemplateNarrator } from "../../src";
 import { DASHBOARD_POLICY, SCAM_PROGRAM, scenarioDefinitions } from "../../scripts/attack-scenarios";
 import { confirmHttp, getLatestBlockhashRetry, sendRawTransactionRetry } from "../../scripts/tx-confirm";
-import idl from "../../programs/firewall/target/idl/firewall.json";
+import idl from "../../programs/firewall/idl/firewall.json";
 
 const PORT = Number(process.env.PORT || 3000);
-const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8898";
+const RPC_URL = process.env.RPC_URL || "https://api.devnet.solana.com";
 const PUBLIC_DIR = join(__dirname, "public");
 const PROGRAM_ID = new PublicKey((idl as any).address);
 
@@ -55,10 +55,11 @@ async function main(): Promise<void> {
   const connection = new Connection(RPC_URL, "confirmed");
   const wallet = process.env.WALLET_KEYPAIR ? loadKp(process.env.WALLET_KEYPAIR) : Keypair.generate();
 
-  // 注资：演示场景合计 ~0.11 SOL，余额不足时从 FAUCET_KEYPAIR 补 0.5
-  if (process.env.FAUCET_KEYPAIR && existsSync(process.env.FAUCET_KEYPAIR)) {
-    const bal = await connection.getBalance(wallet.publicKey);
-    if (bal < 0.06 * LAMPORTS_PER_SOL) {
+  // 注资：演示场景合计 ~0.11 SOL，余额不足时优先从 FAUCET_KEYPAIR 补 0.5；
+  // 否则尝试 devnet 水龙头(requestAirdrop,devnet/本地验证器可用,mainnet 静默失败)
+  const walletBal = await connection.getBalance(wallet.publicKey);
+  if (walletBal < 0.06 * LAMPORTS_PER_SOL) {
+    if (process.env.FAUCET_KEYPAIR && existsSync(process.env.FAUCET_KEYPAIR)) {
       const faucet = loadKp(process.env.FAUCET_KEYPAIR);
       const tx = new Transaction().add(
         SystemProgram.transfer({
@@ -73,6 +74,14 @@ async function main(): Promise<void> {
       const sig = await sendRawTransactionRetry(connection, tx);
       const r = await confirmHttp(connection, sig);
       if (!r.err) console.log(`已为演示钱包注资 0.5 SOL（${wallet.publicKey.toBase58()}）`);
+    } else {
+      try {
+        const sig = await connection.requestAirdrop(wallet.publicKey, 0.5 * LAMPORTS_PER_SOL);
+        await confirmHttp(connection, sig);
+        console.log(`已通过水龙头为演示钱包注资 0.5 SOL（${wallet.publicKey.toBase58()}）`);
+      } catch {
+        console.log("演示钱包余额不足且水龙头不可用——攻击剧本 B/C 的模拟会报余额不足,属预期行为");
+      }
     }
   }
 
