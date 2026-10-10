@@ -10,7 +10,7 @@ import { transactionFingerprint } from "./accounting";
 import { EffectsCollector } from "./effects/collector";
 import { runInvariants } from "./invariants/engine";
 import { Narrator, TemplateNarrator } from "./narrator";
-import { ParsedTransaction, parseTransaction } from "./parser";
+import { isVersionedTransaction, ParsedTransaction, parseTransaction } from "./parser";
 import { ResolvedPolicy, resolvePolicy } from "./policy";
 import { TransactionSimulator } from "./rpc/simulator";
 import { Concern, DecisionEvent, EscalationTier, FirewallPolicy, GateDecision, TransactionIntent, ValidationResult, Verdict } from "./types";
@@ -71,7 +71,7 @@ export class Firewall {
 
       // 不变量引擎(V0 专属):效果收集器提取代币余额/权限突变事实,
       // 协议无关不变量 I1/I2/I4/C1 判定。legacy 无 CPI 可见性,保持旧路径。
-      if (this.connection && intent.transaction instanceof VersionedTransaction) {
+      if (this.connection && intent.transaction && isVersionedTransaction(intent.transaction)) {
         decisions.push(await this.invariantsGate(intent));
       }
     }

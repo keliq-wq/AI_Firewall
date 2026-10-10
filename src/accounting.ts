@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import { Transaction, TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
-import { ParsedTransaction } from "./parser";
+import { isVersionedTransaction, ParsedTransaction } from "./parser";
 import { SpendStore } from "./types";
 import { TransactionIntent } from "./types";
 
@@ -22,7 +22,7 @@ function sha256(input: string): string {
 
 /** 交易内容指纹(不含 blockhash/签名——同内容重试同指纹,内容变即指纹变) */
 function txContentString(tx: Transaction | VersionedTransaction): string {
-  if (tx instanceof VersionedTransaction) {
+  if (isVersionedTransaction(tx)) {
     return Buffer.from(tx.message.serialize()).toString("base64");
   }
   // legacy:序列化指令内容(programId|data|keys),不依赖 blockhash/签名

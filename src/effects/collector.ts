@@ -1,5 +1,6 @@
 import { AccountInfo, Connection, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { decodeTokenAccount, DecodedTokenAccount } from "../decode/token_layout";
+import { isVersionedTransaction } from "../parser";
 import { accountKeysOf } from "../rpc/simulator";
 
 /**
@@ -81,7 +82,7 @@ export class EffectsCollector {
           let program = "";
           try {
             program =
-              tx instanceof VersionedTransaction
+              isVersionedTransaction(tx)
                 ? (tx.message.getAccountKeys().get(programIdx)?.toBase58() ?? "")
                 : (tx.compileMessage().getAccountKeys().get(programIdx)?.toBase58() ?? "");
           } catch {
@@ -97,7 +98,7 @@ export class EffectsCollector {
       }
     };
 
-    if (tx instanceof VersionedTransaction) {
+    if (isVersionedTransaction(tx)) {
       // V0:分块 addresses 配置(契约上限),逐块对账
       for (const chunk of chunks) {
         const resp = await this.connection.simulateTransaction(tx, {
@@ -210,7 +211,7 @@ export class EffectsCollector {
 }
 
 function feePayerOf(tx: Transaction | VersionedTransaction): PublicKey {
-  if (tx instanceof VersionedTransaction) {
+  if (isVersionedTransaction(tx)) {
     const idx = tx.message.staticAccountKeys.length > 0 ? 0 : 0;
     return tx.message.getAccountKeys().get(idx) ?? PublicKey.default;
   }

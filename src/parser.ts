@@ -75,7 +75,19 @@ export const EMPTY_PARSED: ParsedTransaction = {
 
 export function parseTransaction(tx?: Transaction | VersionedTransaction): ParsedTransaction {
   if (!tx) return EMPTY_PARSED;
-  return tx instanceof VersionedTransaction ? parseVersioned(tx) : parseLegacy(tx);
+  return isVersionedTransaction(tx) ? parseVersioned(tx) : parseLegacy(tx);
+}
+
+/**
+ * 结构化判断 VersionedTransaction（V0）：跨 web3.js 副本安全。
+ *
+ * 消费者工程若自带一份 @solana/web3.js（npm 双包场景），`instanceof` 会因
+ * 类身份不同而永远为 false，导致 legacy 交易误入 versioned 分支、读 undefined
+ * message 崩溃。versioned 交易必有 message.getAccountKeys(),legacy 无 message。
+ */
+export function isVersionedTransaction(tx: Transaction | VersionedTransaction): tx is VersionedTransaction {
+  const message = (tx as VersionedTransaction).message as { getAccountKeys?: unknown } | undefined;
+  return typeof message?.getAccountKeys === "function";
 }
 
 /** 从解析结果推导敏感操作类别（worth 门兜底：intent.action 缺失或不准时仍能生效） */

@@ -1,5 +1,5 @@
 import { LAMPORTS_PER_SOL, Transaction, VersionedTransaction } from "@solana/web3.js";
-import { ParsedTransaction } from "../parser";
+import { isVersionedTransaction, ParsedTransaction } from "../parser";
 import { ResolvedPolicy } from "../policy";
 import { Concern, GateDecision, TransactionIntent, Verdict } from "../types";
 import { parseAmount } from "./limits";
@@ -101,7 +101,7 @@ export function envelopeGate(
 /** 交易 fee payer:legacy 取 tx.feePayer;V0 取消息首键(付费者) */
 function feePayerOf(tx?: Transaction | VersionedTransaction): string | undefined {
   if (!tx) return undefined;
-  if (tx instanceof VersionedTransaction) {
+  if (isVersionedTransaction(tx)) {
     return tx.message.staticAccountKeys[0]?.toBase58();
   }
   return tx.feePayer?.toBase58();

@@ -4,6 +4,7 @@ export { InMemorySpendStore } from "./store";
 export { AppendOnlySpendStore, transactionFingerprint } from "./accounting";
 export {
   parseTransaction,
+  isVersionedTransaction,
   classifyActions,
   EMPTY_PARSED,
   ParsedTransaction,

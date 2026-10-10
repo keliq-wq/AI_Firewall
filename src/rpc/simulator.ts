@@ -1,4 +1,5 @@
 import { AccountInfo, Connection, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
+import { isVersionedTransaction } from "../parser";
 
 /**
  * 第 2 层：交易模拟执行引擎。
@@ -33,7 +34,7 @@ export class TransactionSimulator {
 
   async simulate(tx: Transaction | VersionedTransaction, fallbackPayer?: PublicKey): Promise<SimulationReport> {
     // legacy 交易序列化需要 blockhash；模拟模式用 replaceRecentBlockhash 替换为最近有效的
-    if (tx instanceof Transaction) {
+    if (!isVersionedTransaction(tx)) {
       if (!tx.recentBlockhash) {
         tx.recentBlockhash = (await this.connection.getLatestBlockhash("confirmed")).blockhash;
       }
@@ -63,7 +64,7 @@ export class TransactionSimulator {
     // legacy 路径（旧签名）用 includeAccounts: true → 返回 nonProgramIds 顺序的账户状态，
     // 与 accountKeysOf 的 legacy 分支对齐
     const resp =
-      tx instanceof VersionedTransaction
+      isVersionedTransaction(tx)
         ? await this.connection.simulateTransaction(tx, config)
         : await this.connection.simulateTransaction(tx, undefined, true);
     const value = resp.value;
@@ -112,7 +113,7 @@ export class TransactionSimulator {
  */
 export function accountKeysOf(tx: Transaction | VersionedTransaction): PublicKey[] {
   let keys: PublicKey[];
-  if (tx instanceof Transaction) {
+  if (!isVersionedTransaction(tx)) {
     try {
       keys = tx.compileMessage().nonProgramIds();
     } catch {
