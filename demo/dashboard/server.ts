@@ -213,8 +213,13 @@ async function main(): Promise<void> {
       }
       serveStatic(res, url.pathname);
     } catch (e) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: String(e) }));
+      // 客户端可能已断开(刷新/取消),避免二次写头导致进程崩溃
+      if (!res.headersSent && !res.destroyed) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: String(e) }));
+      } else {
+        res.destroy();
+      }
     }
   });
 
