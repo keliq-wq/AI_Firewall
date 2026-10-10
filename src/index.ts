@@ -21,5 +21,5 @@ export { worthGate } from "./gates/worth";
 export { simulationGate } from "./gates/simulation";
 export { TransactionSimulator, SimulationReport, SimulatedEffect, accountKeysOf } from "./rpc/simulator";
 export { EffectsCollector, EffectReport, TokenEffectDelta } from "./effects/collector";
-export { runInvariants, InvariantViolation } from "./invariants/engine";
+export { runInvariants, InvariantViolation, INVARIANT_ERROR_CODES } from "./invariants/engine";
 export { Narrator, TemplateNarrator, OpenAICompatibleNarrator } from "./narrator";

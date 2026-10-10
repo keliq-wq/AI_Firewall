@@ -1,7 +1,7 @@
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 import { EffectsCollector, EffectReport } from "../src/effects/collector";
-import { runInvariants } from "../src/invariants/engine";
+import { INVARIANT_ERROR_CODES, runInvariants } from "../src/invariants/engine";
 import { Firewall } from "../src";
 
 const TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
@@ -226,6 +226,13 @@ describe("Firewall 管线接入 — V0 不变量全链路", () => {
     });
     expect(r.shouldProceed).toBe(false);
     expect(r.concerns.some((c) => c.id === "INV_I2")).toBe(true);
+  });
+});
+
+describe("P4 闭环 — 链上错误码 ↔ 不变量 ID", () => {
+  it("6011 → I1,6012 → I2", () => {
+    expect(INVARIANT_ERROR_CODES[6011]).toBe("I1");
+    expect(INVARIANT_ERROR_CODES[6012]).toBe("I2");
   });
 });
 

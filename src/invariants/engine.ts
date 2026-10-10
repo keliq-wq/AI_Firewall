@@ -24,6 +24,15 @@ const SENSITIVE_TAG_NAME: Record<number, string> = {
   9: "CloseAccount",
 };
 
+/**
+ * 链上错误码 ↔ 不变量 ID 映射(P4 闭环,与 programs/firewall/src/invariants.rs 一致):
+ * 链上 revert 的错误码经此表翻译成客户端不变量语言,同一攻击两端用同一 ID 说话。
+ */
+export const INVARIANT_ERROR_CODES: Record<number, string> = {
+  6011: "I1",
+  6012: "I2",
+};
+
 export function runInvariants(report: EffectReport, wallet?: string): InvariantViolation[] {
   const out: InvariantViolation[] = [];
 

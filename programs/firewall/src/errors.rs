@@ -25,4 +25,8 @@ pub enum FirewallError {
     ProgramInvokeFailed,
     #[msg("Arithmetic overflow")]
     ArithmeticOverflow,
+    #[msg("Invariant I1 violated: vault net outflow exceeds declared amount")]
+    InvariantI1Violated,
+    #[msg("Invariant I2 violated: token permission mutated by target program")]
+    InvariantI2Violated,
 }

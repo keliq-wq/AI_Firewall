@@ -4,6 +4,7 @@ use anchor_lang::solana_program::program::invoke_signed;
 
 use crate::constants;
 use crate::errors::FirewallError;
+use crate::invariants::{is_token_account, token_close_authority_tag, token_delegate_tag};
 use crate::state::{PolicyConfig, VaultState};
 
 /// 协议调用：金库向白名单协议付款（如 swap / 质押）。
@@ -60,7 +61,21 @@ pub fn handler(ctx: Context<Execute>, amount: u64, data: Vec<u8>) -> Result<()> 
         .vault_state
         .advance_window(now, policy.daily_limit, amount)?;
 
-    // 5. PDA 作为签名者调用目标协议（金库 → 目标协议交互账户）
+    // 5. CPI 前态捕获（P4 链上不变量：效果 ⊆ 信封 ⊆ 策略上限）
+    let vault_lamports_before = ctx.accounts.vault.lamports();
+    let dest_data_before = ctx.accounts.destination.data.borrow().to_vec();
+    let dest_delegate_tag_before = if is_token_account(&ctx.accounts.destination.owner) {
+        token_delegate_tag(&dest_data_before)
+    } else {
+        None
+    };
+    let dest_close_auth_before = if is_token_account(&ctx.accounts.destination.owner) {
+        token_close_authority_tag(&dest_data_before)
+    } else {
+        None
+    };
+
+    // 6. PDA 作为签名者调用目标协议（金库 → 目标协议交互账户）
     let authority_key = policy.authority.key();
     let seeds: &[&[u8]] = &[constants::VAULT_SEED, authority_key.as_ref(), &[ctx.bumps.vault]];
     let instruction = Instruction {
@@ -80,5 +95,29 @@ pub fn handler(ctx: Context<Execute>, amount: u64, data: Vec<u8>) -> Result<()> 
         ],
         &[seeds],
     )
-    .map_err(|_| error!(FirewallError::ProgramInvokeFailed))
+    .map_err(|_| error!(FirewallError::ProgramInvokeFailed))?;
+
+    // 7. 链上不变量断言（与客户端 INV_I1/INV_I2 同 ID 闭环）
+    // I1：金库净流出 ≤ 声明金额——目标协议即使拿到金库签名也抽不走超额资金
+    let vault_outflow = vault_lamports_before
+        .checked_sub(ctx.accounts.vault.lamports())
+        .unwrap_or(0);
+    require!(
+        vault_outflow <= amount,
+        FirewallError::InvariantI1Violated
+    );
+
+    // I2：目标协议不得对交互账户注入代币权限突变（Approve/closeAuthority）
+    if is_token_account(&ctx.accounts.destination.owner) {
+        let dest_data_after = ctx.accounts.destination.data.borrow();
+        let delegate_changed = token_delegate_tag(&dest_data_after) != dest_delegate_tag_before;
+        let close_auth_changed =
+            token_close_authority_tag(&dest_data_after) != dest_close_auth_before;
+        require!(
+            !delegate_changed && !close_auth_changed,
+            FirewallError::InvariantI2Violated
+        );
+    }
+
+    Ok(())
 }
