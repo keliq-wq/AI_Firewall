@@ -11,6 +11,11 @@
  * 演练(不签名不发交易,只看防火墙判定):
  *   DRY_RUN=1 ... 同上
  *
+ * 实时可视化(面板实时拦截日志上屏,前提:npm run dashboard 已启动):
+ *   FIREWALL_DASHBOARD_URL=http://127.0.0.1:3000 ... 同上
+ *   → 交易先 POST 给面板 /api/validate 判定(以面板策略为准),判定实时进日志;
+ *     放行才签名发送。不设此变量则本地 Firewall 实例判定(语义相同,不进面板日志)。
+ *
  * 流程:构造交易(未签名)→ 防火墙签名前验证(Layer 1 四门 + Layer 2 真实 RPC 模拟执行)
  *      → 放行才签名发送;拦截则打印原因并退出。
  *
@@ -73,34 +78,64 @@ async function main(): Promise<void> {
   tx.recentBlockhash = blockhash;
 
   // 2. 防火墙在签名前验证:声明意图 + 原始交易字节 → Layer 1 四门 + Layer 2 模拟执行
-  const firewall = new Firewall(
-    {
-      maxTransactionAmount: 1, // 单笔上限(SOL)
-      dailyLimit: 5, // 24h 滚动支出上限
-      allowedPrograms: [SystemProgram.programId.toBase58()], // 白名单:只允许系统转账
-    },
-    { connection }, // 配置 RPC 后启用第 2 层(真实链上状态模拟)
-  );
+  //    优先走面板(实时拦截日志可视化,以面板策略为准);未设则本地 Firewall 实例(语义相同)
+  type VerdictShape = {
+    shouldProceed: boolean;
+    requiresConfirmation: boolean;
+    summary: string;
+    concerns: { id: string; severity: string; message: string }[];
+  };
+  let verdict: VerdictShape;
+  const dashboardUrl = process.env.FIREWALL_DASHBOARD_URL?.replace(/\/+$/, "");
+  if (dashboardUrl) {
+    const resp = await fetch(`${dashboardUrl}/api/validate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        transactionBase64: Buffer.from(tx.serialize({ requireAllSignatures: false })).toString("base64"),
+        action: "transfer",
+        amount,
+        recipient: recipient.toBase58(),
+        purpose, // 敏感操作必须声明业务理由(worth 门硬基线)
+        wallet: wallet.publicKey.toBase58(), // 声明钱包 → 模拟门据此比对净流出
+        idempotencyKey: `transfer:${recipient.toBase58()}:${Date.now()}`,
+      }),
+    });
+    if (!resp.ok) {
+      console.error(`面板判定失败: ${resp.status} ${await resp.text()}`);
+      process.exit(1);
+    }
+    verdict = (await resp.json()) as VerdictShape;
+    console.log(`判定来源: 面板 ${dashboardUrl}（判定已进实时拦截日志）`);
+  } else {
+    const firewall = new Firewall(
+      {
+        maxTransactionAmount: 1, // 单笔上限(SOL)
+        dailyLimit: 5, // 24h 滚动支出上限
+        allowedPrograms: [SystemProgram.programId.toBase58()], // 白名单:只允许系统转账
+      },
+      { connection }, // 配置 RPC 后启用第 2 层(真实链上状态模拟)
+    );
+    verdict = await firewall.validateTransaction({
+      action: "transfer",
+      amount,
+      recipient: recipient.toBase58(),
+      purpose,
+      wallet: wallet.publicKey.toBase58(),
+      transaction: tx,
+      idempotencyKey: `transfer:${recipient.toBase58()}:${Date.now()}`, // 幂等:重复校验不虚增 24h 记账
+    });
+  }
 
-  const result = await firewall.validateTransaction({
-    action: "transfer",
-    amount,
-    recipient: recipient.toBase58(),
-    purpose, // 敏感操作必须声明业务理由(worth 门硬基线)
-    wallet: wallet.publicKey.toBase58(), // 声明钱包 → 模拟门据此比对净流出
-    transaction: tx,
-    idempotencyKey: `transfer:${recipient.toBase58()}:${Date.now()}`, // 幂等:重复校验不虚增 24h 记账
-  });
+  console.log(`\n判定: ${verdict.shouldProceed ? "✓ 放行" : verdict.requiresConfirmation ? "⚠ 需人工确认" : "✗ 拦截"}`);
+  console.log(`摘要: ${verdict.summary}`);
+  for (const c of verdict.concerns) console.log(`  [${c.severity}] ${c.id}: ${c.message}`);
 
-  console.log(`\n判定: ${result.shouldProceed ? "✓ 放行" : result.requiresConfirmation ? "⚠ 需人工确认" : "✗ 拦截"}`);
-  console.log(`摘要: ${result.summary}`);
-  for (const c of result.concerns) console.log(`  [${c.severity}] ${c.id}: ${c.message}`);
-
-  if (!result.shouldProceed) {
+  if (!verdict.shouldProceed) {
     console.error("\n防火墙拦截,未签名、未发送。");
     process.exit(1);
   }
-  if (result.requiresConfirmation) {
+  if (verdict.requiresConfirmation) {
     console.error("\n需人工确认(escalate),示例不自动放行——检查上面关切项后再决定。");
     process.exit(1);
   }
