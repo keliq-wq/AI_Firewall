@@ -110,7 +110,7 @@ export class TransactionSimulator {
  * - legacy：模拟响应按 nonProgramIds() 顺序返回（web3.js v1 legacy 路径语义）
  * - versioned：省略 addresses 时响应按交易账户键顺序返回全部被触及账户
  */
-function accountKeysOf(tx: Transaction | VersionedTransaction): PublicKey[] {
+export function accountKeysOf(tx: Transaction | VersionedTransaction): PublicKey[] {
   let keys: PublicKey[];
   if (tx instanceof Transaction) {
     try {
