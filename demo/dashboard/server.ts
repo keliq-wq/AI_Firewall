@@ -10,8 +10,10 @@
  *   WALLET_KEYPAIR 演示钱包（缺省自动生成；无资金则场景 B/C 模拟会报余额不足）
  *   FAUCET_KEYPAIR 注资钱包（余额 < 0.06 SOL 时自动转 0.5 补充）
  *   PORT           默认 3000
+ *   NO_OPEN=1      启动时不自动打开浏览器（无头环境/CI 用）
  */
 import { createServer, IncomingMessage, ServerResponse } from "http";
+import { exec } from "child_process";
 import { existsSync, readFileSync, statSync, readdirSync } from "fs";
 import { join, extname } from "path";
 import {
@@ -233,10 +235,20 @@ async function main(): Promise<void> {
   });
 
   server.listen(PORT, "127.0.0.1", () => {
-    console.log(`防火墙面板: http://127.0.0.1:${PORT}`);
+    const url = `http://127.0.0.1:${PORT}`;
+    console.log(`防火墙面板: ${url}`);
     console.log(`RPC: ${RPC_URL}`);
     console.log(`钱包: ${wallet.publicKey.toBase58()}`);
     console.log(`静态目录: ${PUBLIC_DIR}${existsSync(PUBLIC_DIR) ? `（${readdirSync(PUBLIC_DIR).length} 文件）` : "（缺失!）"}`);
+    // 自动打开默认浏览器（无头/CI 环境设 NO_OPEN=1 关闭;失败静默,不影响面板）
+    if (!process.env.NO_OPEN) {
+      const open =
+        process.platform === "win32" ? `start "" "${url}"`
+        : process.platform === "darwin" ? `open "${url}"`
+        : `xdg-open "${url}"`;
+      exec(open, () => {});
+      console.log(`已在默认浏览器打开面板 ${process.platform}`);
+    }
   });
 }
 

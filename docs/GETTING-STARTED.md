@@ -127,11 +127,12 @@ npx tsx scripts/devnet-smoke.ts https://api.devnet.solana.com
 
 ```bash
 npm run dashboard
-# 打开 http://127.0.0.1:3000 —— 五剧本点击即测,中英切换
+# 启动后自动在默认浏览器打开 http://127.0.0.1:3000 —— 五剧本点击即测,中英切换
 ```
 
 默认连接 devnet 公共 RPC,演示钱包自动经水龙头注资 0.5 SOL(devnet 限流时剧本 B/C
-的模拟会显示余额不足,属预期)。自定义:`RPC_URL=<rpc> WALLET_KEYPAIR=<已注资钱包> npm run dashboard`。
+的模拟会显示余额不足,属预期)。自定义:`RPC_URL=<rpc> WALLET_KEYPAIR=<已注资钱包> npm run dashboard`;
+无头环境/CI 不想弹浏览器加 `NO_OPEN=1`。
 
 ## 常见问题
 
