@@ -1,7 +1,8 @@
 /**
  * 真实钱包交易示例 —— 在别的目录里用防火墙保护真实转账的完整流程。
  *
- * 用法(任意目录,先 npm install github:keliq-wq/AI_Firewall @solana/web3.js tsx):
+ * 用法(任意目录,先 npm install github:keliq-wq/AI_Firewall @solana/web3.js@1 tsx):
+ * 注意:web3.js 必须固定 v1(防火墙库基于 v1.99;v2 API 不兼容)。
  *
  *   RPC_URL=https://api.devnet.solana.com \
  *   WALLET_KEYPAIR=~/.config/solana/id.json \
@@ -110,8 +111,34 @@ async function main(): Promise<void> {
 
   // 3. 放行 → 签名并发送(整笔交易单次签齐)
   tx.sign(wallet);
-  const signature = await connection.sendRawTransaction(tx.serialize());
-  await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
+  const raw = tx.serialize();
+  // 公共 RPC 偶发 502/429:重发同一笔 raw 是幂等的(同签名同交易,不会重复扣款)
+  let signature: string | undefined;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      signature = await connection.sendRawTransaction(raw);
+      break;
+    } catch (e) {
+      console.error(`发送失败(第 ${attempt + 1}/5 次): ${(e as Error).message.slice(0, 80)}`);
+      if (attempt === 4) {
+        console.error("连续失败。若交易其实已上链(响应丢失),重跑脚本前先查钱包最近交易,避免新 blockhash 重复转账。");
+        process.exit(1);
+      }
+      await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+    }
+  }
+  // HTTP 轮询确认(WS 订阅在代理/慢网络下竞态超时,轮询最稳)
+  for (let i = 0; i < 90; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const status = await connection.getSignatureStatuses([signature!]);
+      const s = status.value[0];
+      if (s?.err) throw new Error(`交易失败: ${JSON.stringify(s.err)}`);
+      if (s?.confirmationStatus === "confirmed" || s?.confirmationStatus === "finalized") break;
+    } catch (e) {
+      if (i === 89) throw e; // 最后一轮仍失败才抛出(中途失败视为瞬时抖动)
+    }
+  }
   const cluster = RPC_URL.includes("mainnet") ? "mainnet" : "devnet";
   console.log(`\n✅ 已上链: https://explorer.solana.com/tx/${signature}?cluster=${cluster}`);
 }
