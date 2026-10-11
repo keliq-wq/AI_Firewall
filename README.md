@@ -32,6 +32,15 @@ npm run dashboard # 零构建,自动打开浏览器:剧本演示 + 实时拦截�
 > Windows 一键体验:装好 Node.js 后直接**双击仓库根目录的 `start-dashboard.bat`**
 > ——首次自动安装依赖,然后自动弹出面板,全程不用输任何命令。
 
+真实钱包转账示例(签名前防火墙验证,拦截不签名、放行才上链,含 DRY_RUN 演练与面板日志联动):
+
+```bash
+WALLET_KEYPAIR=~/.config/solana/id.json \
+npx tsx examples/real-wallet-transfer.ts <收款地址> 0.01 "买咖啡"
+```
+
+详见 `examples/real-wallet-transfer.ts` 文件头注释(安装须固定 `@solana/web3.js@1`)。
+
 Or install directly from GitHub (works before the npm release):
 
 ```bash
