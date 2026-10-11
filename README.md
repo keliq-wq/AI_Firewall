@@ -121,7 +121,19 @@ src/                 core library (gates, parser, simulator, narrator, MCP, agen
 programs/firewall/   Anchor program (Layer 3) + integration tests
 scripts/             deploy / attack scenarios / RPC proxy / confirm helpers
 demo/                dashboard/ (web console)
+landing/             bilingual landing page (Next.js, static export)
 docs/                online-testing guide · demo narration guide
+```
+
+## Landing page
+
+中英双语 landing page(英文默认,右上角切换,记住选择),Next.js 15 纯静态导出,证据区链接真实链上拒绝交易:
+
+```bash
+cd landing
+npm install
+npm run dev      # http://localhost:3100
+npm run build    # 静态导出到 landing/out
 ```
 
 ## More

@@ -30,3 +30,10 @@ docs/视频演讲词.md
 
 # 垃圾文件夹(演讲/演示/审计材料,本地保留)
 垃圾/
+
+# impeccable 本地工作流状态（决策页/审查截图/构建状态）
+.impeccable/
+
+# Next.js landing 构建产物
+.next/
+out/
