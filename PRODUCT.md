@@ -37,7 +37,7 @@ Meaningfully different mechanism: the agent's signing key never controls the vau
 
 ## Capabilities and Constraints
 
-- 80 tests passing (20 files); Layer 2 verified with five live attack scenarios against real RPC; Layer 3 testnet integration suite 6/6.
+- 85 tests passing (22 files); Layer 2 verified with five live attack scenarios against real RPC; Layer 3 testnet integration suite 6/6.
 - Terminology: CLAW gates, envelope/invariant engine (I1/I2/I4/C1), PDA vault, 24h rolling window.
 - Constraints (stated honestly, not hidden): devnet resets; Layer 1's 24h rolling spend is in-memory on the client; Layer 2 legacy transactions have no CPI visibility (use V0); chain window uses Clock.
 - Known backlog (documented in repo): legacy token drain, vault SOL outflow, price layer.
@@ -51,7 +51,7 @@ Meaningfully different mechanism: the agent's signing key never controls the vau
 ## Evidence on Hand
 
 - Chain: testnet explorer-verifiable on-chain rejections (AmountExceeded 6000, DailyLimitExceeded 6002, ProgramNotAllowed 6003, UnauthorizedAgent 6004); devnet revert 6011 (declared 0.01 vs CPI 0.02).
-- Tests: 80 vitest cases; live-attack script covering five attack scripts (owner change, over-limit, silent drain, blacklist, control group).
+- Tests: 85 vitest cases; live-attack script covering five attack scripts (owner change, over-limit, silent drain, blacklist, control group).
 - Demo: dashboard with scripted scenarios + live SSE interception log; real-wallet transfer example.
 - Absences future work must not fabricate: no production users, no testimonials, no third-party audit, no benchmarks against competitors.
 

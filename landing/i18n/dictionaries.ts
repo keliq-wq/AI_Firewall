@@ -57,7 +57,7 @@ export const dictionaries: Record<"en" | "zh", Dict> = {
           name: "CLAW gates",
           role: "Client-side · offline · <1ms",
           body: "CLAW parses the transaction before anything leaves your machine: credibility, limits, avoidance, worth. The obvious attacks die here, with no RPC round-trip.",
-          evidence: "80 tests across 20 files, offline legacy and V0 parsing.",
+          evidence: "85 tests across 22 files, offline legacy and V0 parsing.",
         },
         {
           name: "Simulation",
@@ -142,7 +142,7 @@ export const dictionaries: Record<"en" | "zh", Dict> = {
       steps: [
         {
           title: "Run the test suite",
-          body: "80 cases, no setup beyond Node.js.",
+          body: "85 cases, no setup beyond Node.js.",
           command: "npm test",
         },
         {
@@ -219,7 +219,7 @@ export const dictionaries: Record<"en" | "zh", Dict> = {
           name: "CLAW 四门",
           role: "客户端 · 完全离线 · <1ms",
           body: "CLAW 在交易离开你的机器之前解析它：可信度、限额、规避、价值四门。明显的攻击在这里就被拦下，无需任何 RPC 往返。",
-          evidence: "80 个测试覆盖 20 个文件，离线解析 legacy 与 V0 交易。",
+          evidence: "85 个测试覆盖 22 个文件，离线解析 legacy 与 V0 交易。",
         },
         {
           name: "模拟执行",
@@ -304,7 +304,7 @@ export const dictionaries: Record<"en" | "zh", Dict> = {
       steps: [
         {
           title: "跑测试套件",
-          body: "80 个用例，装好 Node.js 之外零配置。",
+          body: "85 个用例，装好 Node.js 之外零配置。",
           command: "npm test",
         },
         {

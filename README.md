@@ -25,7 +25,7 @@
 git clone https://github.com/keliq-wq/AI_Firewall.git
 cd AI_Firewall
 npm install
-npm test          # 80 tests(20 文件)
+npm test          # 85 tests(22 文件)
 npm run dashboard # 零构建,自动打开浏览器:剧本演示 + 实时拦截日志(SSE 实时流,重启不丢)
 ```
 
